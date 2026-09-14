@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "A REMPLIR depuis le navigateur: ouvrir tstkonto.bl.ch, DevTools > Network, poser une",
+    "question dans la Smart Search, puis 'Copy as cURL' sur l'appel de recherche et reporter",
+    "ici l'URL, les en-tetes (cookie de session, X-Tenant, CSRF) et la forme du corps.",
+    "L'API AiSearch n'est pas joignable en direct: son ingress n'autorise que les adresses",
+    "sortantes de la Gateway eGovHub et du BackOffice. Il faut donc passer par le portail."
+  ],
+  "base_url": "https://tstkonto.bl.ch",
+  "path": "/api/smartsearch/conversations",
+  "method": "POST",
+  "timeout_s": 90,
+  "headers": {
+    "Accept": "application/json",
+    "Accept-Language": "de-CH",
+    "Cookie": "<coller le cookie de session>",
+    "X-Tenant": "<tenantKey>"
+  },
+  "body_template": "{\"message\": \"{{query}}\", \"language\": \"{{lang}}\"}",
+  "followup_body_template": "{\"conversationId\": \"{{conversation_id}}\", \"message\": \"{{query}}\", \"language\": \"{{lang}}\"}",
+  "extract": {
+    "conversation_id": "conversationId",
+    "state": "state",
+    "answer_text": "answer.text",
+    "result_titles": "services[].title",
+    "result_ids": "services[].id"
+  }
+}
