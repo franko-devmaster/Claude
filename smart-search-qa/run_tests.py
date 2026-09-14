@@ -4,9 +4,14 @@
 Rejoue un corpus de requetes contre l'endpoint Smart Search d'un portail et
 archive les reponses brutes. Aucune dependance externe: stdlib uniquement.
 
-Le debit est volontairement bas (1 requete toutes les 8s par defaut): l'API
-Smart Search est adossee a une inference GPU mutualisee, et l'environnement INT
-partage la file de priorite avec la PROD.
+Le debit est volontairement bas et les appels sont serialises. Ce n'est pas une
+precaution de principe: l'instance TEST tourne avec MaxConcurrency = 1 (repartition
+decidee DEV 1 / TEST 1 / PROD 10 sur un plafond GPU mesure a 12), et la file de
+priorite sert INT apres la PROD. Envoyer deux requetes en parallele depuis INT ne
+les accelere pas, cela les met en file jusqu'au 503.
+
+La latence attendue n'est pas negligeable non plus: le benchmark de concurrence
+mesure ~4.1-4.8s pour un seul appel LLM, avant surcout de la Gateway et de l'API.
 """
 
 import argparse
@@ -92,22 +97,31 @@ class SmartSearchClient:
             headers={"Content-Type": "application/json", **self.cfg.get("headers", {})},
         )
         started = time.monotonic()
+        retry_after = None
         try:
             with urllib.request.urlopen(request, timeout=self.cfg.get("timeout_s", DEFAULT_TIMEOUT_S)) as response:
                 raw = response.read().decode("utf-8", "replace")
                 status = response.status
         except urllib.error.HTTPError as err:
             raw, status = err.read().decode("utf-8", "replace"), err.code
+            retry_after = err.headers.get("Retry-After")
         except Exception as err:  # noqa: BLE001 - on veut tracer toute panne reseau
             raw, status = json.dumps({"_transport_error": repr(err)}), 0
         finally:
             self.last_call = time.monotonic()
         latency_ms = round((time.monotonic() - started) * 1000)
 
+        # 429 = le rate limiter par tenant refuse le debit; 503 = la file du modele a
+        # expire (WaitTimeout). Les deux portent un Retry-After: on l'honore plutot que
+        # d'imposer notre propre cadence.
         retryable = status in (0, 408, 425, 429, 500, 502, 503, 504)
         if retryable and attempt <= 3:
-            backoff = min(60, 5 * 2 ** attempt)
-            print("    ! statut %s, nouvelle tentative dans %ss" % (status, backoff), file=sys.stderr)
+            try:
+                backoff = max(5, min(120, int(retry_after)))
+            except (TypeError, ValueError):
+                backoff = min(60, 5 * 2 ** attempt)
+            label = {429: "debit refuse (rate limit)", 503: "modele sature (file pleine)"}.get(status, "statut %s" % status)
+            print("    ! %s, nouvelle tentative dans %ss" % (label, backoff), file=sys.stderr)
             time.sleep(backoff)
             return self.call(body, attempt + 1)
 
@@ -125,7 +139,8 @@ class SmartSearchClient:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
             parsed = {"_unparsed_body": raw[:4000]}
-        return {"status": status, "latency_ms": latency_ms, "body": parsed}
+        return {"status": status, "latency_ms": latency_ms, "body": parsed,
+                "admission_rejected": status in (429, 503)}
 
 
 def run_case(client, case, repetition, config):
@@ -140,6 +155,7 @@ def run_case(client, case, repetition, config):
         variables = {"query": followup, "lang": case.get("lang", "de"), "conversation_id": conversation_id or ""}
         turns.append(client.call(render(config["followup_body_template"], variables)))
 
+    admission_rejected = any(t["admission_rejected"] for t in turns)
     final = turns[-1]["body"]
     titles = extract(final, config["extract"]["result_titles"]) or []
     ids = extract(final, config["extract"].get("result_ids")) or []
@@ -151,7 +167,9 @@ def run_case(client, case, repetition, config):
         "repetition": repetition,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "http_status": [t["status"] for t in turns],
+        "admission_rejected": admission_rejected,
         "latency_ms": sum(t["latency_ms"] for t in turns),
+        "latency_first_turn_ms": turns[0]["latency_ms"],
         "turns": len(turns),
         "conversation_state": extract(final, config["extract"].get("state")),
         "assistant_text": extract(final, config["extract"].get("answer_text")),
@@ -216,7 +234,8 @@ def main():
                 sink.write(json.dumps(record, ensure_ascii=False) + "\n")
                 sink.flush()
                 top = ", ".join(record["result_titles"][:3]) or "(aucun resultat)"
-                print("    -> %s | %sms | %s" % (record["http_status"], record["latency_ms"], top))
+                flag = " [REJET ADMISSION - exclu du scoring]" if record["admission_rejected"] else ""
+                print("    -> %s | %sms | %s%s" % (record["http_status"], record["latency_ms"], top, flag))
 
     (out_dir / "run_meta.json").write_text(json.dumps({
         "started": stamp, "cases": len(cases), "repeats": repeats,

@@ -3,6 +3,32 @@
 Harnais de mesure de la pertinence de la Smart Search eGovHub, calibre pour
 `tstkonto.bl.ch` (INT, R2026.3). Stdlib Python 3.9+, aucune dependance.
 
+## Reference de ce qui est « pertinent »
+
+La definition contractuelle n'est pas une opinion d'equipe : elle est dans
+`EC/AI Search User Stories`. Ce protocole en derive trois contraintes qui changent
+la lecture des chiffres, et deux ecarts a documenter.
+
+| Critere d'acceptation | Consequence sur la mesure |
+| --- | --- |
+| Maximum 5 resultats affiches | Hit@5 est le plafond utile, pas un choix de metrique. |
+| Les resultats sous 0.6 de confiance ne sont pas affiches | Un silence peut etre un effet de seuil, pas un echec de rappel. Sans acces aux scores bruts, on ne peut pas trancher — et on risque d'enrichir un catalogue pour un probleme de seuil. |
+| Temps de reponse inferieur a 2 secondes | Mesure par la colonne `< 2 s`. Voir l'ecart ci-dessous. |
+| DE, FR, EN **et variations dialectales** | Le corpus porte des cas FR, EN et trois cas en suisse-allemand (`lang: gsw`). |
+| Commune de domicile pre-remplie pour un usager AGOV | Le comportement des slots change selon l'etat de session : la campagne se joue **deux fois**, deconnecte puis connecte. |
+
+**Ecart de latence, a poser avant la campagne.** Le critere d'acceptation fixe
+2 secondes. Le benchmark de concurrence mesure **~4.1-4.8 s pour un seul appel
+LLM**, hors surcout Gateway et API, et une recherche complete compte environ trois
+allers-retours. L'ecart est structurel, pas conjoncturel : la colonne `< 2 s` va
+sortir a zero, et ce n'est pas une panne. Soit le critere est revu, soit la cible
+d'infrastructure change — c'est une decision produit, pas un resultat de test.
+
+**Ecart d'instrumentation.** L'AC « tableau de bord analytique » prevoit
+explicitement la liste des requetes sans resultat, pour enrichir le catalogue.
+Elle porte la mention *ne pas creer pour le moment*. C'est exactement la donnee
+que cette campagne fabrique a la main.
+
 ## Ce que ce protocole mesure — et ce qu'il ne mesure pas
 
 Il mesure **la chaine complete** : extraction LLM (theme / mots-cles / evenement
@@ -21,6 +47,10 @@ ininterpretables si on les ignore :
    ecrit dans la page d'architecture : X memes questions peuvent donner Y
    reponses). Une passe unique ne distingue pas un mauvais classement d'un tirage
    defavorable. D'ou `--repeats 3` par defaut, et les colonnes de stabilite.
+3. **Seuil de confiance.** A 0.6, le moteur masque. Un taux de silence eleve sur
+   une categorie ne dit pas si la bonne prestation etait absente du classement ou
+   presente sous le seuil. Demander a Michel l'acces aux scores bruts avant la
+   campagne evite de conclure a l'envers.
 
 ## Etapes
 
@@ -36,6 +66,12 @@ agent du guichet designerait comme la bonne reponse, et remplacer `expect` par
 leurs intitules (ou leurs ids via `result_ids`). Les cas sans bonne reponse dans
 le catalogue passent a `"expect_no_result": true` — ils testent alors l'honnetete
 du systeme, ce qui est une mesure a part entiere.
+
+Profiter du meme passage pour sortir le **denominateur** : les keywords et life
+events sont geres comme des tags par tenant (`Id`, `Name`, `TenantId`) et
+importables en masse par CSV depuis le back-office. Un export equivalent donne le
+taux de prestations effectivement taguees — sans ce chiffre, un score bas sur
+l'axe B n'est pas interpretable.
 
 ### 2. Capturer le contrat d'API
 
@@ -63,11 +99,27 @@ python3 run_tests.py --repeats 3 --interval 8
 
 46 cas x 3 repetitions ≈ 140 appels, ~20 minutes a 8 s d'intervalle.
 
-**Le debit par defaut est volontairement bas.** L'inference tourne sur un noeud
-GPU A30 mutualise et l'environnement INT partage la file de priorite. Le harnais
-serialise les appels, ajoute un jitter, applique un backoff exponentiel sur
-429/5xx et **s'arrete de lui-meme apres 3 echecs serveur consecutifs**. Ne pas
+**La serialisation n'est pas une precaution de principe, c'est la capacite reelle
+d'INT.** Le controle d'admission fixe `MaxConcurrency` par instance, avec une
+repartition decidee **DEV 1 / TEST 1 / PROD 10** sur un plafond GPU mesure a 12.
+L'instance de test traite donc **une requete a la fois** ; la file de priorite
+(`X-Ai-Search-Priority` : 10 PROD, 50 INT, 90 DEV, le plus bas gagne) sert INT
+apres la production. Paralleliser depuis INT n'accelere rien : les appels
+s'empilent jusqu'au `WaitTimeout`, puis tombent en 503.
+
+Le harnais serialise, ajoute un jitter, **honore l'en-tete `Retry-After`**,
+distingue les deux rejets — 429 debit refuse par le rate limiter, 503 file du
+modele saturee — et s'arrete apres 3 erreurs serveur consecutives. Ne pas
 descendre `--interval` sous 5 s, et ne pas paralleliser.
+
+**Un appel rejete n'est pas un echec de pertinence.** Les enregistrements 429/503
+sont marques `admission_rejected` et exclus du scoring, puis comptes a part dans
+l'en-tete du rapport. Sans cela, une rafale de rate limiting se lirait comme un
+effondrement de la pertinence.
+
+Ne pas confondre cette campagne avec un test de charge : le benchmark de
+concurrence exige d'isoler l'ingress au loopback et de couper l'auto-sync Argo CD.
+Rien de tel ici — on mesure la pertinence sur un service en fonctionnement normal.
 
 Pour etaler la charge, la campagne est decoupable par categorie :
 
@@ -117,6 +169,9 @@ Grille de lecture :
 
 ## Limites connues
 
+- Le corpus compte 49 cas, dont 3 en suisse-allemand. La tolerance dialectale est
+  un critere d'acceptation, pas un bonus : l'echec de ces trois cas est un ecart
+  contractuel.
 - La campagne mesure **INT**, avec l'integration des prestations communales
   installee recemment et des problemes d'horodatage encore ouverts. Les ecarts
   avec la PROD ne sont pas imputables au moteur.
