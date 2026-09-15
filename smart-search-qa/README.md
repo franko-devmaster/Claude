@@ -80,16 +80,31 @@ adresses sortantes de la Gateway eGovHub et du BackOffice. Il faut donc passer
 par le portail.
 
 Sur `tstkonto.bl.ch` : DevTools → Network → poser une question dans la Smart
-Search → `Copy as cURL` sur l'appel de recherche. Reporter URL, en-tetes
-(cookie de session, tenant, CSRF) et forme du corps dans `config.json`, en
-partant de `config.example.json`. Verifier les chemins d'extraction : ce sont
-eux qui decident de ce que le scoring lit comme « resultat ».
+Search → clic droit sur l'appel de recherche → **Copy as cURL**, coller dans un
+fichier. Le reste est automatique :
 
 ```bash
-cp config.example.json config.json   # puis editer
+python3 from_curl.py --curl-file appel.txt --query "Betreibungsregisterauszug"
+```
+
+`--query` est le texte reellement saisi dans le champ de recherche : il permet
+de reperer sans ambiguite le champ qui porte la question. Le script isole la
+requete, ecarte les en-tetes propres au navigateur (`sec-*`, `content-length`,
+`accept-encoding`), conserve ceux qui portent la session et le tenant, remplace
+la question par `{{query}}`, puis **envoie une requete de sondage et deduit les
+chemins d'extraction** en inspectant la reponse reelle. Il ecrit un `config.json`
+complet, template de relance compris.
+
+Si le sondage renvoie 401 ou 403, la session du cURL a expire : recapturer
+l'appel. `--no-probe` ecrit la partie requete et laisse `extract` a completer.
+
+```bash
 python3 run_tests.py --dry-run       # affiche le plan, n'appelle rien
 python3 run_tests.py --smoke         # un seul cas: valide le cablage
 ```
+
+`config.example.json` reste la reference de la structure attendue, pour une
+configuration manuelle.
 
 ### 3. Lancer la campagne
 
