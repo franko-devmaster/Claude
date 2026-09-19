@@ -444,6 +444,9 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
           <input class="inp num" type="date" id="hol-date" aria-label="Date du jour férié">
           <input class="inp" type="text" id="hol-label" placeholder="Libellé" aria-label="Libellé du jour férié" style="max-width:180px">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)">
+            <input type="checkbox" id="hol-half">demi-journée
+          </label>
           <button class="btn" id="hol-add">Ajouter</button>
           <button class="btn btn-ghost" id="hol-reset">Réinitialiser (Fribourg)</button>
         </div>
@@ -550,6 +553,28 @@
     });
     return all;
   }
+  function defaultHolidayYears() {
+    var y = new Date().getFullYear();
+    return [y - 1, y, y + 1];
+  }
+  /** Seed a year's holidays the first time it is looked at — a year never
+   *  seeded would otherwise count 0 holiday and overstate the hours due.
+   *  A year the user has edited is never re-seeded. */
+  function ensureHolidayYears(years) {
+    var known = state.settings.holidayYears || (state.settings.holidayYears = []);
+    var added = false;
+    years.forEach(function (y) {
+      y = +y;
+      if (!y || known.indexOf(y) >= 0) return;
+      var h = holidaysForYear(y);
+      Object.keys(h).forEach(function (k) {
+        if (!(k in state.settings.holidays)) state.settings.holidays[k] = h[k];
+      });
+      known.push(y);
+      added = true;
+    });
+    return added;
+  }
 
   // ---------------------------------------------------------------- state
   var state = {
@@ -562,6 +587,7 @@
       absencesCount: true,
       actMap: Object.assign({}, DEFAULT_ACTMAP),
       holidays: defaultHolidays(),
+      holidayYears: defaultHolidayYears(),
       coverageFrom: null,
       coverageTo: null,
       fetchedAt: null
@@ -605,10 +631,16 @@
   // ---------------------------------------------------------------- compute
   function dailySeconds() { return Math.round(state.settings.dailyHours * 3600); }
 
+  /** A holiday is stored as a label, or as {label, off} where `off` is the
+   *  chômé fraction of the day (1 = jour entier, 0.5 = demi-journée). */
+  function holLabel(h) { return (h && typeof h === "object") ? (h.label || "Férié") : h; }
+  function holOff(h) { return (h && typeof h === "object" && typeof h.off === "number") ? h.off : 1; }
+
   function dueSeconds(isoDate) {
-    if (state.settings.holidays[isoDate]) return 0;
     var dow = parseISO(isoDate).getDay();
     if (dow === 0 || dow === 6) return 0;
+    var h = state.settings.holidays[isoDate];
+    if (h) return Math.round(dailySeconds() * Math.max(0, 1 - holOff(h)));
     return dailySeconds();
   }
 
@@ -703,6 +735,15 @@
 
   // ---------------------------------------------------------------- render
   function render() {
+    var years = {};
+    [state.ui.asof, state.ui.month, state.settings.openingDate, todayISO()].forEach(function (d) {
+      years[d.slice(0, 4)] = 1;
+    });
+    coveredMonths().forEach(function (m) { years[m.slice(0, 4)] = 1; });
+    var y0 = +state.settings.openingDate.slice(0, 4), y1 = +state.ui.asof.slice(0, 4);
+    for (var y = y0; y <= y1 && y - y0 < 25; y++) years[y] = 1;
+    if (ensureHolidayYears(Object.keys(years))) persistSettings();
+
     renderNotices();
     renderHero();
     renderMonths();
@@ -897,7 +938,7 @@
         return '<span class="chip"><i class="' + CATS[c].cls + '"></i>' + esc(CATS[c].label) +
           " " + fmtH(info.abs[c]) + "</span>";
       }).join(" ");
-      var note = hol ? '<em>Férié — ' + esc(hol) + "</em>"
+      var note = hol ? "<em>" + (holOff(hol) < 1 ? "Demi-jour" : "Férié") + " — " + esc(holLabel(hol)) + "</em>"
         : (dow === 0 || dow === 6) ? "<em>Week-end</em>"
         : info.total === 0 ? (d.iso > today ? "<em>à venir</em>" : '<em style="color:var(--warn)">aucune saisie</em>')
         : "";
@@ -986,7 +1027,8 @@
     var hol = s.holidays, y = state.ui.month.slice(0, 4);
     var list = Object.keys(hol).filter(function (d) { return d.slice(0, 4) === y; }).sort();
     $("holidays").innerHTML = list.map(function (d) {
-      return '<span class="hol">' + esc(d.slice(8) + "." + d.slice(5, 7)) + " " + esc(hol[d]) +
+      return '<span class="hol">' + esc(d.slice(8) + "." + d.slice(5, 7)) + " " + esc(holLabel(hol[d])) +
+        (holOff(hol[d]) < 1 ? ' <b style="font-weight:600;color:var(--ink-3)">½</b>' : "") +
         '<button data-hol="' + d + '" aria-label="Supprimer">×</button></span>';
     }).join("") || '<span class="help" style="color:var(--ink-3)">Aucun jour férié pour ' + esc(y) + "</span>";
     Array.prototype.forEach.call($("holidays").querySelectorAll("button[data-hol]"), function (b) {
@@ -1015,6 +1057,11 @@
     if ((out.settingsVersion || 1) < 2) {
       if (!out.dailyHours || Math.abs(out.dailyHours - 8.4) < 0.001) out.dailyHours = 8.5;
       out.settingsVersion = 2;
+    }
+    if (!out.holidayYears) {
+      var years = {};
+      Object.keys(out.holidays || {}).forEach(function (d) { years[+d.slice(0, 4)] = true; });
+      out.holidayYears = Object.keys(years).map(Number);
     }
     return out;
   }
@@ -1281,12 +1328,16 @@
     $("hol-add").addEventListener("click", function () {
       var d = $("hol-date").value, l = $("hol-label").value.trim() || "Férié";
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
-      state.settings.holidays[d] = l;
-      $("hol-date").value = ""; $("hol-label").value = "";
+      var half = $("hol-half").checked;
+      state.settings.holidays[d] = half ? { label: l, off: 0.5 } : l;
+      if ((state.settings.holidayYears || []).indexOf(+d.slice(0, 4)) < 0) state.settings.holidayYears.push(+d.slice(0, 4));
+      $("hol-date").value = ""; $("hol-label").value = ""; $("hol-half").checked = false;
       persistSettings(); render();
     });
     $("hol-reset").addEventListener("click", function () {
-      state.settings.holidays = defaultHolidays(); persistSettings(); render();
+      state.settings.holidays = defaultHolidays();
+      state.settings.holidayYears = defaultHolidayYears();
+      persistSettings(); render();
     });
   }
 
