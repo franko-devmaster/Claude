@@ -413,7 +413,7 @@
         <div class="field">
           <label for="set-daily">Heures dues par jour ouvré</label>
           <input class="inp num" type="number" id="set-daily" step="0.05" min="0" max="12">
-          <span class="help">8.4 h = 42 h/semaine à 100 %</span>
+          <span class="help" id="daily-help">8.5 = 8 h 30 par jour</span>
         </div>
         <div class="field">
           <label for="set-open-date">Date du report initial</label>
@@ -554,7 +554,8 @@
   // ---------------------------------------------------------------- state
   var state = {
     settings: {
-      dailyHours: 8.4,
+      settingsVersion: 2,
+      dailyHours: 8.5,
       openingDate: String(new Date().getFullYear()) + "-01-01",
       openingHours: 0,
       vacationDays: 25,
@@ -586,7 +587,7 @@
       if (dow === 0 || dow === 6) continue;
       if (key > todayISO()) continue;
       if (d % 11 === 0) {
-        days[key] = { entries: [{ k: "ACT-6", c: "Vacances", s: 8.4 * 3600 }] };
+        days[key] = { entries: [{ k: "ACT-6", c: "Vacances", s: dailySeconds() }] };
       } else {
         var hrs = pattern[k++ % pattern.length];
         days[key] = { entries: [
@@ -954,6 +955,7 @@
   function renderSettings() {
     var s = state.settings;
     $("set-daily").value = s.dailyHours;
+    $("daily-help").textContent = fmtH(dailySeconds()) + " par jour · " + fmtH(dailySeconds() * 5) + " par semaine";
     $("set-open-date").value = s.openingDate;
     $("set-open-hours").value = s.openingHours;
     $("set-vac").value = s.vacationDays;
@@ -1006,6 +1008,17 @@
   }
 
   // ---------------------------------------------------------------- storage
+  /** Stored settings from an older version of the page. Only an untouched
+   *  default is moved forward — a value the user has set is never overwritten. */
+  function migrateSettings(s) {
+    var out = Object.assign({}, s);
+    if ((out.settingsVersion || 1) < 2) {
+      if (!out.dailyHours || Math.abs(out.dailyHours - 8.4) < 0.001) out.dailyHours = 8.5;
+      out.settingsVersion = 2;
+    }
+    return out;
+  }
+
   function settingsDoc() { return { v: 1, settings: state.settings, ui: { month: state.ui.month } }; }
 
   function persistSettings() {
@@ -1027,7 +1040,7 @@
       var raw = localStorage.getItem(STORE_KEY + ".settings");
       if (raw) {
         var d = JSON.parse(raw);
-        if (d && d.settings) { Object.assign(state.settings, d.settings); loaded = true; }
+        if (d && d.settings) { Object.assign(state.settings, migrateSettings(d.settings)); loaded = true; }
       }
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
@@ -1049,7 +1062,7 @@
       var snap = await db.doc("config/settings").get();
       if (snap.exists) {
         var d = snap.data();
-        if (d && d.settings) Object.assign(state.settings, d.settings);
+        if (d && d.settings) Object.assign(state.settings, migrateSettings(d.settings));
       }
       var q = await db.collection("months").get();
       if (q && q.docs && q.docs.length) {
