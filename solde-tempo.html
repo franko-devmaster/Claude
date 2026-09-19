@@ -1,0 +1,1302 @@
+<title>Solde Tempo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --bg:            #f4f5f3;
+    --surface:       #ffffff;
+    --surface-2:     #eceeea;
+    --surface-3:     #e3e6e1;
+    --border:        #dcdfd9;
+    --border-strong: #c3c8bf;
+    --ink-1:         #1a1d1a;
+    --ink-2:         #555d56;
+    --ink-3:         #848c84;
+    --accent:        #0f6b6f;
+    --accent-ink:    #ffffff;
+    --accent-soft:   #dff0ef;
+    --pos:           #0a7a3c;
+    --pos-soft:      #dff0e5;
+    --neg:           #b4302e;
+    --neg-soft:      #fae3e2;
+    --warn:          #8a5a00;
+    --warn-soft:     #fbeed2;
+    /* absence categories — validated all-pairs, light surface */
+    --cat-vac:       #2a78d6;
+    --cat-rec:       #1baf7a;
+    --cat-mal:       #eb6834;
+    --cat-oth:       #7c837b;
+    --shadow:        0 1px 2px rgba(20,28,20,.06), 0 4px 14px rgba(20,28,20,.05);
+    --radius:        10px;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg:            #121412;
+      --surface:       #1b1e1b;
+      --surface-2:     #232722;
+      --surface-3:     #2c312b;
+      --border:        #333a32;
+      --border-strong: #4a5248;
+      --ink-1:         #f0f3ee;
+      --ink-2:         #b3bbb1;
+      --ink-3:         #848d82;
+      --accent:        #3fa9ab;
+      --accent-ink:    #0c1c1c;
+      --accent-soft:   #16302f;
+      --pos:           #48c07c;
+      --pos-soft:      #14301f;
+      --neg:           #ef7b78;
+      --neg-soft:      #33201f;
+      --warn:          #d8a441;
+      --warn-soft:     #2f2612;
+      --cat-vac:       #3987e5;
+      --cat-rec:       #199e70;
+      --cat-mal:       #d95926;
+      --cat-oth:       #8b938a;
+      --shadow:        0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg:            #121412;
+    --surface:       #1b1e1b;
+    --surface-2:     #232722;
+    --surface-3:     #2c312b;
+    --border:        #333a32;
+    --border-strong: #4a5248;
+    --ink-1:         #f0f3ee;
+    --ink-2:         #b3bbb1;
+    --ink-3:         #848d82;
+    --accent:        #3fa9ab;
+    --accent-ink:    #0c1c1c;
+    --accent-soft:   #16302f;
+    --pos:           #48c07c;
+    --pos-soft:      #14301f;
+    --neg:           #ef7b78;
+    --neg-soft:      #33201f;
+    --warn:          #d8a441;
+    --warn-soft:     #2f2612;
+    --cat-vac:       #3987e5;
+    --cat-rec:       #199e70;
+    --cat-mal:       #d95926;
+    --cat-oth:       #8b938a;
+    --shadow:        0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink-1);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 600; letter-spacing: -0.01em; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .shell { max-width: 1140px; margin: 0 auto; padding: 0 16px 64px; }
+
+  /* ---------- header ---------- */
+  .topbar {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 20;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-in {
+    max-width: 1140px; margin: 0 auto; padding: 10px 16px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+  }
+  .brand { display: flex; flex-direction: column; margin-right: auto; }
+  .brand strong { font-size: 15px; font-weight: 600; letter-spacing: -0.015em; }
+  .brand span { font-size: 11.5px; color: var(--ink-3); letter-spacing: .04em; text-transform: uppercase; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 13px; border-radius: 8px; border: 1px solid var(--border-strong);
+    background: var(--surface); cursor: pointer; font-size: 13px; font-weight: 500;
+    transition: background .12s ease, border-color .12s ease;
+  }
+  .btn:hover { background: var(--surface-2); }
+  .btn[disabled] { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+  .btn-ghost { border-color: transparent; background: transparent; }
+  .btn-ghost:hover { background: var(--surface-2); }
+  .sel, .inp {
+    padding: 6px 9px; border-radius: 8px; border: 1px solid var(--border-strong);
+    background: var(--surface); color: var(--ink-1); font: inherit; font-size: 13px;
+  }
+  .inp.num { font-family: var(--mono); }
+
+  /* ---------- notices ---------- */
+  .notice {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 10px 13px; border-radius: var(--radius); font-size: 13px;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--ink-2);
+    margin-top: 14px;
+  }
+  .notice strong { color: var(--ink-1); font-weight: 600; }
+  .notice.is-warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, transparent); color: var(--ink-1); }
+  .notice.is-error { background: var(--neg-soft); border-color: color-mix(in srgb, var(--neg) 35%, transparent); color: var(--ink-1); }
+  .notice .notice-act { margin-left: auto; }
+
+  /* ---------- hero ---------- */
+  .hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; margin-top: 16px; }
+  @media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .balance { padding: 20px 22px 18px; display: flex; flex-direction: column; gap: 4px; position: relative; }
+  .eyebrow { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  .balance-figure { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .balance-value {
+    font-family: var(--mono); font-weight: 600; font-size: clamp(38px, 9vw, 58px);
+    line-height: 1.02; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+  }
+  .balance-value.pos { color: var(--pos); }
+  .balance-value.neg { color: var(--neg); }
+  .balance-value.zero { color: var(--ink-1); }
+  .balance-unit { font-size: 15px; color: var(--ink-2); }
+  .asof { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 13px; color: var(--ink-2); }
+  .asof label { color: var(--ink-3); }
+  .composition {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+  }
+  @media (max-width: 480px) { .composition { grid-template-columns: 1fr 1fr; } }
+  .composition div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .composition dt { font-size: 11px; color: var(--ink-3); letter-spacing: .04em; text-transform: uppercase; font-weight: 600; margin: 0; }
+  .composition dd { margin: 0; font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .composition dd small { font-family: var(--sans); font-size: 12px; color: var(--ink-3); }
+  .spark { margin-top: 12px; }
+  .spark svg { display: block; width: 100%; height: 56px; overflow: visible; }
+  .badge-sample {
+    position: absolute; top: 14px; right: 14px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 999px; background: var(--warn-soft); color: var(--warn);
+    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 520px) { .tiles { grid-template-columns: 1fr; } }
+  .tile { padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+  .tile-value { font-family: var(--mono); font-size: 25px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .tile-sub { font-size: 12px; color: var(--ink-3); }
+  .tile.alert .tile-value { color: var(--warn); }
+  .meter { height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; margin-top: 8px; display: flex; gap: 2px; }
+  .meter i { display: block; height: 100%; }
+  .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-size: 12px; text-align: left; text-decoration: underline; text-underline-offset: 2px; }
+
+  /* ---------- sections ---------- */
+  section { margin-top: 26px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .sec-head h2 { font-size: 16px; }
+  .sec-head .hint { font-size: 12.5px; color: var(--ink-3); }
+  .sec-head .spacer { margin-left: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tablewrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
+  th, td { padding: 7px 11px; text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3);
+    font-weight: 600; border-bottom: 1px solid var(--border); background: var(--surface-2);
+    position: sticky; top: 0;
+  }
+  tbody tr { border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+  tbody tr:last-child { border-bottom: 0; }
+  tfoot td { border-top: 1.5px solid var(--border-strong); font-weight: 600; background: var(--surface-2); }
+  .row-off td { color: var(--ink-3); background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+  .row-missing td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+  .row-today td { background: var(--accent-soft); }
+  .row-future td { color: var(--ink-3); }
+  .row-click { cursor: pointer; }
+  .row-click:hover td { background: var(--surface-2); }
+  .cell-pos { color: var(--pos); }
+  .cell-neg { color: var(--neg); }
+  .daylabel { display: flex; align-items: center; gap: 8px; }
+  .daylabel b { font-weight: 600; font-family: var(--mono); font-size: 12.5px; }
+  .daylabel em { font-style: normal; color: var(--ink-3); font-size: 12px; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500;
+    padding: 2px 8px 2px 6px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--ink-1);
+  }
+  .chip i { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+  .dot-vac { background: var(--cat-vac); }
+  .dot-rec { background: var(--cat-rec); }
+  .dot-mal { background: var(--cat-mal); }
+  .dot-oth { background: var(--cat-oth); }
+
+  /* diverging bar cell */
+  .div-cell { width: 180px; min-width: 140px; }
+  .div-bar { position: relative; height: 16px; }
+  .div-bar .axis { position: absolute; left: 50%; top: -1px; bottom: -1px; width: 1px; background: var(--border-strong); }
+  .div-bar i { position: absolute; top: 3px; height: 10px; border-radius: 3px; }
+  .div-bar i.pos { background: var(--pos); left: 50%; }
+  .div-bar i.neg { background: var(--neg); right: 50%; }
+
+  .daybar { display: flex; gap: 2px; align-items: center; height: 10px; min-width: 120px; }
+  .daybar i { height: 10px; border-radius: 2px; display: block; }
+  .daybar .work { background: var(--accent); }
+  .daybar .due-rest { background: var(--surface-3); }
+
+  .detail td { background: var(--surface-2); white-space: normal; text-align: left; }
+  .entries { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 8px; }
+  .entry { display: grid; grid-template-columns: 96px 1fr auto; gap: 10px; align-items: baseline; font-size: 12.5px; }
+  .entry code { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .entry span { color: var(--ink-2); overflow-wrap: anywhere; }
+  .entry b { font-family: var(--mono); font-weight: 500; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+  .legend .chip { background: transparent; border-color: transparent; padding-left: 0; }
+
+  /* settings */
+  details.settings { margin-top: 26px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  details.settings > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 14px; list-style: none; display: flex; align-items: center; gap: 8px; }
+  details.settings > summary::-webkit-details-marker { display: none; }
+  details.settings > summary::after { content: "▾"; margin-left: auto; color: var(--ink-3); }
+  details.settings[open] > summary::after { content: "▴"; }
+  .settings-body { padding: 4px 16px 18px; border-top: 1px solid var(--border); display: grid; gap: 18px; }
+  .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--ink-2); font-weight: 500; }
+  .field .help { font-size: 11.5px; color: var(--ink-3); }
+  .maplist { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
+  .maprow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .maprow code { font-family: var(--mono); color: var(--accent); }
+  .maprow .sel { margin-left: auto; padding: 3px 6px; font-size: 12px; }
+  .holidays { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hol { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 6px 3px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); }
+  .hol button { border: 0; background: none; cursor: pointer; color: var(--ink-3); font-size: 14px; line-height: 1; padding: 0 2px; }
+  .hol button:hover { color: var(--neg); }
+
+  .foot { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+
+  .progress { height: 3px; background: var(--surface-3); border-radius: 999px; overflow: hidden; margin-top: 10px; }
+  .progress i { display: block; height: 100%; background: var(--accent); transition: width .2s ease; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <strong>Solde des heures</strong>
+      <span id="worker-name">François Charrière · Jira Tempo</span>
+    </div>
+    <select class="sel" id="scope" aria-label="Période à actualiser">
+      <option value="month">Mois affiché</option>
+      <option value="year" selected>Année en cours</option>
+      <option value="since">Depuis le report initial</option>
+    </select>
+    <button class="btn btn-primary" id="refresh">↻ Actualiser</button>
+    <button class="btn btn-ghost" id="cancel" hidden>Annuler</button>
+  </div>
+</div>
+
+<div class="shell">
+  <div id="notices"></div>
+  <div class="progress" id="progress" hidden><i style="width:0%"></i></div>
+
+  <div class="hero">
+    <div class="panel balance">
+      <div class="badge-sample" id="sample-badge" hidden>Exemple</div>
+      <div class="eyebrow">Solde total cumulé</div>
+      <div class="balance-figure">
+        <div class="balance-value zero" id="total-balance">—</div>
+        <div class="balance-unit" id="total-balance-days"></div>
+      </div>
+      <div class="asof">
+        <label for="asof-date">Solde au</label>
+        <input class="inp num" type="date" id="asof-date">
+        <button class="btn btn-ghost" id="asof-today" style="padding:4px 8px;font-size:12px">Aujourd'hui</button>
+      </div>
+      <dl class="composition" id="composition"></dl>
+      <div class="spark" id="spark"></div>
+    </div>
+
+    <div class="tiles">
+      <div class="panel tile" id="tile-month">
+        <div class="eyebrow">Solde du mois</div>
+        <div class="tile-value" id="month-balance">—</div>
+        <div class="tile-sub" id="month-sub">—</div>
+        <div class="meter" id="month-meter"></div>
+      </div>
+      <div class="panel tile alert" id="tile-missing">
+        <div class="eyebrow">Jours sans saisie</div>
+        <div class="tile-value" id="missing-count">—</div>
+        <div class="tile-sub" id="missing-sub">jours ouvrés non saisis</div>
+      </div>
+      <div class="panel tile">
+        <div class="eyebrow">Vacances prises</div>
+        <div class="tile-value" id="vac-days">—</div>
+        <div class="tile-sub" id="vac-sub">—</div>
+        <div class="meter" id="vac-meter"></div>
+      </div>
+      <div class="panel tile">
+        <div class="eyebrow">Absences (année)</div>
+        <div class="tile-value" id="abs-days">—</div>
+        <div class="tile-sub" id="abs-sub">—</div>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <div class="sec-head">
+      <h2>Par mois</h2>
+      <span class="hint">dû contractuel, temps saisi dans Tempo, écart et cumul</span>
+    </div>
+    <div class="tablewrap">
+      <table id="months-table">
+        <thead>
+          <tr>
+            <th scope="col">Mois</th>
+            <th scope="col">Dû</th>
+            <th scope="col">Saisi</th>
+            <th scope="col">Solde</th>
+            <th scope="col" class="div-cell">Écart mensuel</th>
+            <th scope="col">Cumul</th>
+          </tr>
+        </thead>
+        <tbody id="months-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Détail du mois</h2>
+      <span class="spacer"></span>
+      <select class="sel" id="month-select" aria-label="Mois affiché"></select>
+    </div>
+    <div class="tablewrap">
+      <table id="days-table">
+        <thead>
+          <tr>
+            <th scope="col">Jour</th>
+            <th scope="col">Dû</th>
+            <th scope="col">Saisi</th>
+            <th scope="col">Écart</th>
+            <th scope="col" style="text-align:left">Répartition</th>
+            <th scope="col" style="text-align:left">Absence / activité</th>
+          </tr>
+        </thead>
+        <tbody id="days-body"></tbody>
+        <tfoot id="days-foot"></tfoot>
+      </table>
+    </div>
+    <div class="legend">
+      <span class="chip"><i class="dot-vac"></i>Vacances</span>
+      <span class="chip"><i class="dot-rec"></i>Récupération d'heures</span>
+      <span class="chip"><i class="dot-mal"></i>Maladie &amp; accident</span>
+      <span class="chip"><i class="dot-oth"></i>Autre absence (formation, congé payé, absence professionnelle…)</span>
+      <span>Cliquez une journée pour voir les worklogs.</span>
+    </div>
+  </section>
+
+  <details class="settings" id="settings">
+    <summary>Paramètres de calcul</summary>
+    <div class="settings-body">
+      <div class="field-grid">
+        <div class="field">
+          <label for="set-daily">Heures dues par jour ouvré</label>
+          <input class="inp num" type="number" id="set-daily" step="0.05" min="0" max="12">
+          <span class="help">8.4 h = 42 h/semaine à 100 %</span>
+        </div>
+        <div class="field">
+          <label for="set-open-date">Date du report initial</label>
+          <input class="inp num" type="date" id="set-open-date">
+          <span class="help">Début du cumul</span>
+        </div>
+        <div class="field">
+          <label for="set-open-hours">Report initial (heures)</label>
+          <input class="inp num" type="number" id="set-open-hours" step="0.25">
+          <span class="help">Solde connu à cette date</span>
+        </div>
+        <div class="field">
+          <label for="set-vac">Droit aux vacances (jours/an)</label>
+          <input class="inp num" type="number" id="set-vac" step="0.5" min="0" max="60">
+          <span class="help">Pour le compteur vacances</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Tickets d'absence → catégorie</label>
+        <span class="help">Détecté depuis le projet ACT « Absences ». Les entrées ACT non classées sont analysées par mot-clé (maladie, krank, accident, unfall).</span>
+        <div class="maplist" id="actmap"></div>
+      </div>
+
+      <div class="field">
+        <label>Jours fériés <span class="help" style="display:inline">(0 h dû — à vérifier avec les RH)</span></label>
+        <div class="holidays" id="holidays"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <input class="inp num" type="date" id="hol-date" aria-label="Date du jour férié">
+          <input class="inp" type="text" id="hol-label" placeholder="Libellé" aria-label="Libellé du jour férié" style="max-width:180px">
+          <button class="btn" id="hol-add">Ajouter</button>
+          <button class="btn btn-ghost" id="hol-reset">Réinitialiser (Fribourg)</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label><input type="checkbox" id="set-abs-counts" style="margin-right:6px">Les absences saisies comptent comme temps rempli</label>
+        <span class="help">Décochez si votre solde ne doit retenir que le temps productif.</span>
+      </div>
+    </div>
+  </details>
+
+  <div class="foot">
+    <span id="coverage">Aucune donnée chargée</span>
+    <span id="freshness"></span>
+    <span>Source : worklogs Jira (jira.softcom.pro) via le connecteur MCP Jira Softcom</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var SERVER = "MCP Jira Softcom";
+  var WORKER = "François Charrière";
+  var STORE_KEY = "solde-tempo.v1";
+  var CATS = {
+    vac: { label: "Vacances", cls: "dot-vac", varname: "--cat-vac" },
+    rec: { label: "Récupération", cls: "dot-rec", varname: "--cat-rec" },
+    mal: { label: "Maladie & accident", cls: "dot-mal", varname: "--cat-mal" },
+    oth: { label: "Autre absence", cls: "dot-oth", varname: "--cat-oth" }
+  };
+  var DEFAULT_ACTMAP = {
+    "ACT-6": "vac", "ACT-19": "rec", "ACT-3": "oth", "ACT-21": "oth",
+    "ACT-9": "oth", "ACT-13": "oth", "ACT-14": "oth", "ACT-22": "oth", "ACT-26": "oth"
+  };
+  var MONTHS_FR = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+  var DOW_FR = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
+
+  // ---------------------------------------------------------------- helpers
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function iso(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function parseISO(s) { var p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function todayISO() { return iso(new Date()); }
+  function monthOf(isoDate) { return isoDate.slice(0, 7); }
+  function monthLabel(m) { var p = m.split("-"); return MONTHS_FR[+p[1] - 1] + " " + p[0]; }
+  function daysInMonth(m) { var p = m.split("-"); return new Date(+p[0], +p[1], 0).getDate(); }
+
+  function fmtH(seconds, opts) {
+    opts = opts || {};
+    var sign = seconds < 0 ? "−" : (opts.signed && seconds > 0 ? "+" : "");
+    var s = Math.round(Math.abs(seconds) / 60) * 60;
+    var h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+    if (m === 60) { h += 1; m = 0; }
+    if (!h && !m) return opts.zero || "0 h";
+    if (!h) return sign + m + " min";
+    return sign + h + " h" + (m ? " " + pad(m) : "");
+  }
+  function fmtDays(seconds, dailySec) {
+    if (!dailySec) return "";
+    var d = seconds / dailySec;
+    return (Math.round(d * 10) / 10).toString().replace(".", ",") + " j";
+  }
+
+  /** Easter Sunday (Meeus/Jones/Butcher), returns Date. */
+  function easter(year) {
+    var a = year % 19, b = Math.floor(year / 100), c = year % 100;
+    var d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+    var g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+    var i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+    var m = Math.floor((a + 11 * h + 22 * l) / 451);
+    var month = Math.floor((h + l - 7 * m + 114) / 31);
+    var day = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(year, month - 1, day);
+  }
+  function addDays(date, n) { var d = new Date(date.getTime()); d.setDate(d.getDate() + n); return d; }
+  /** Fribourg / Swiss holiday set for one year. */
+  function holidaysForYear(y) {
+    var E = easter(y), out = {};
+    function put(d, label) { out[iso(d)] = label; }
+    put(new Date(y, 0, 1), "Nouvel An");
+    put(addDays(E, -2), "Vendredi Saint");
+    put(addDays(E, 1), "Lundi de Pâques");
+    put(addDays(E, 39), "Ascension");
+    put(addDays(E, 50), "Lundi de Pentecôte");
+    put(addDays(E, 60), "Fête-Dieu");
+    put(new Date(y, 7, 1), "Fête nationale");
+    put(new Date(y, 7, 15), "Assomption");
+    put(new Date(y, 10, 1), "Toussaint");
+    put(new Date(y, 11, 8), "Immaculée Conception");
+    put(new Date(y, 11, 25), "Noël");
+    return out;
+  }
+  function defaultHolidays() {
+    var y = new Date().getFullYear(), all = {};
+    [y - 1, y, y + 1].forEach(function (yy) {
+      var h = holidaysForYear(yy);
+      Object.keys(h).forEach(function (k) { all[k] = h[k]; });
+    });
+    return all;
+  }
+
+  // ---------------------------------------------------------------- state
+  var state = {
+    settings: {
+      dailyHours: 8.4,
+      openingDate: String(new Date().getFullYear()) + "-01-01",
+      openingHours: 0,
+      vacationDays: 25,
+      absencesCount: true,
+      actMap: Object.assign({}, DEFAULT_ACTMAP),
+      holidays: defaultHolidays(),
+      coverageFrom: null,
+      coverageTo: null,
+      fetchedAt: null
+    },
+    months: {},          // "2026-09" -> { month, days: { iso: { entries:[{k,c,s}] } }, fetchedAt }
+    isSample: true,
+    ui: { month: monthOf(todayISO()), asof: todayISO(), openDay: null },
+    db: null,
+    mcp: null,
+    busy: false,
+    abort: null
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------------------------------------------------------------- sample
+  function buildSample() {
+    var m = monthOf(todayISO()), n = daysInMonth(m), days = {};
+    var pattern = [8.5, 8, 7.5, 9, 8, 8.25, 7.75, 8.5];
+    var k = 0;
+    for (var d = 1; d <= n; d++) {
+      var key = m + "-" + pad(d), dow = parseISO(key).getDay();
+      if (dow === 0 || dow === 6) continue;
+      if (key > todayISO()) continue;
+      if (d % 11 === 0) {
+        days[key] = { entries: [{ k: "ACT-6", c: "Vacances", s: 8.4 * 3600 }] };
+      } else {
+        var hrs = pattern[k++ % pattern.length];
+        days[key] = { entries: [
+          { k: "PROD-31", c: "Coordination et planification", s: Math.round(hrs * 0.45 * 3600) },
+          { k: "EGSZ-20", c: "Suivi projet", s: Math.round(hrs * 0.55 * 3600) }
+        ] };
+      }
+    }
+    state.months = {}; state.months[m] = { month: m, days: days, fetchedAt: null };
+    state.isSample = true;
+    state.settings.coverageFrom = m + "-01";
+    state.settings.coverageTo = todayISO();
+  }
+
+  // ---------------------------------------------------------------- compute
+  function dailySeconds() { return Math.round(state.settings.dailyHours * 3600); }
+
+  function dueSeconds(isoDate) {
+    if (state.settings.holidays[isoDate]) return 0;
+    var dow = parseISO(isoDate).getDay();
+    if (dow === 0 || dow === 6) return 0;
+    return dailySeconds();
+  }
+
+  function catOf(key, comment) {
+    var mapped = state.settings.actMap[key];
+    if (mapped) {
+      if (mapped === "oth" && /malad|krank|accident|unfall|arrêt de travail/i.test(comment || "")) return "mal";
+      return mapped;
+    }
+    if (/^ACT-/.test(key)) {
+      if (/malad|krank|accident|unfall/i.test(comment || "")) return "mal";
+      if (/vacance|ferien|urlaub/i.test(comment || "")) return "vac";
+      if (/compens|récup|recup/i.test(comment || "")) return "rec";
+      return "oth";
+    }
+    return null;
+  }
+
+  /** Aggregated view of one day: { total, work, abs:{cat:sec}, entries }. */
+  function dayInfo(isoDate) {
+    var m = state.months[monthOf(isoDate)];
+    var rec = m && m.days ? m.days[isoDate] : null;
+    var out = { total: 0, work: 0, abs: {}, entries: rec && rec.entries ? rec.entries : [], known: !!m };
+    out.entries.forEach(function (e) {
+      out.total += e.s;
+      var c = catOf(e.k, e.c);
+      if (c) out.abs[c] = (out.abs[c] || 0) + e.s;
+      else out.work += e.s;
+    });
+    return out;
+  }
+
+  /** Seconds counted toward the balance for a day. */
+  function creditedSeconds(info) {
+    if (state.settings.absencesCount) return info.total;
+    return info.work;
+  }
+
+  function monthStats(m) {
+    var n = daysInMonth(m), today = todayISO();
+    var st = {
+      month: m, due: 0, dueToDate: 0, credited: 0, work: 0, abs: {},
+      missing: [], days: []
+    };
+    for (var d = 1; d <= n; d++) {
+      var key = m + "-" + pad(d);
+      var due = dueSeconds(key), info = dayInfo(key), cred = creditedSeconds(info);
+      st.due += due;
+      if (key <= today) st.dueToDate += due;
+      st.credited += cred;
+      st.work += info.work;
+      Object.keys(info.abs).forEach(function (c) { st.abs[c] = (st.abs[c] || 0) + info.abs[c]; });
+      if (due > 0 && info.total === 0 && key <= today && key >= state.settings.openingDate) st.missing.push(key);
+      st.days.push({ iso: key, due: due, info: info, credited: cred });
+    }
+    st.balance = st.credited - st.due;
+    st.balanceToDate = st.credited - st.dueToDate;
+    return st;
+  }
+
+  function coveredMonths() {
+    return Object.keys(state.months).sort();
+  }
+
+  /** Cumulative balance from openingDate through a cut-off date. */
+  function totalBalance(cutoffISO) {
+    var s = state.settings.openingHours * 3600;
+    var from = state.settings.openingDate;
+    var months = coveredMonths();
+    for (var i = 0; i < months.length; i++) {
+      var m = months[i], n = daysInMonth(m);
+      for (var d = 1; d <= n; d++) {
+        var key = m + "-" + pad(d);
+        if (key < from || key > cutoffISO) continue;
+        s += creditedSeconds(dayInfo(key)) - dueSeconds(key);
+      }
+    }
+    return s;
+  }
+
+  function absenceDaysThisYear() {
+    var y = state.ui.asof.slice(0, 4), per = {}, dsec = dailySeconds();
+    coveredMonths().forEach(function (m) {
+      if (m.slice(0, 4) !== y) return;
+      var st = monthStats(m);
+      Object.keys(st.abs).forEach(function (c) { per[c] = (per[c] || 0) + st.abs[c]; });
+    });
+    var days = {};
+    Object.keys(per).forEach(function (c) { days[c] = per[c] / dsec; });
+    return { seconds: per, days: days };
+  }
+
+  // ---------------------------------------------------------------- render
+  function render() {
+    renderNotices();
+    renderHero();
+    renderMonths();
+    renderMonthSelect();
+    renderDays();
+    renderSettings();
+    renderFoot();
+  }
+
+  var notices = [];
+  function setNotice(id, html, kind) {
+    notices = notices.filter(function (n) { return n.id !== id; });
+    if (html) notices.push({ id: id, html: html, kind: kind || "" });
+    renderNotices();
+  }
+  function renderNotices() {
+    var el = $("notices");
+    var extra = [];
+    if (state.isSample) {
+      extra.push({
+        kind: "is-warn",
+        html: "<div><strong>Données d'exemple.</strong> Les chiffres ci-dessous sont fictifs — cliquez sur <strong>Actualiser</strong> pour charger vos worklogs Tempo.</div>"
+      });
+    }
+    var all = extra.concat(notices);
+    el.innerHTML = all.map(function (n) {
+      return '<div class="notice ' + n.kind + '">' + n.html + "</div>";
+    }).join("");
+  }
+
+  function renderHero() {
+    var dsec = dailySeconds();
+    var bal = totalBalance(state.ui.asof);
+    var el = $("total-balance");
+    el.textContent = fmtH(bal, { signed: true, zero: "0 h" });
+    el.className = "balance-value " + (Math.abs(bal) < 60 ? "zero" : bal > 0 ? "pos" : "neg");
+    $("total-balance-days").textContent = Math.abs(bal) >= 60 ? "soit " + fmtDays(bal, dsec).replace("-", "−") : "";
+    $("sample-badge").hidden = !state.isSample;
+    $("asof-date").value = state.ui.asof;
+
+    var st = monthStats(state.ui.month);
+    var mb = $("month-balance");
+    var isCurrent = state.ui.month === monthOf(todayISO());
+    var shown = isCurrent ? st.balanceToDate : st.balance;
+    mb.textContent = fmtH(shown, { signed: true, zero: "0 h" });
+    mb.style.color = Math.abs(shown) < 60 ? "" : (shown > 0 ? "var(--pos)" : "var(--neg)");
+    $("month-sub").textContent = monthLabel(state.ui.month) + " · saisi " + fmtH(st.credited) +
+      " / dû " + fmtH(isCurrent ? st.dueToDate : st.due) + (isCurrent ? " à date" : "");
+    var ref = Math.max(st.due, st.credited, 1);
+    $("month-meter").innerHTML =
+      '<i style="width:' + (100 * st.work / ref) + '%;background:var(--accent)"></i>' +
+      Object.keys(st.abs).map(function (c) {
+        return '<i style="width:' + (100 * st.abs[c] / ref) + '%;background:var(' + CATS[c].varname + ')"></i>';
+      }).join("");
+
+    var missAll = [];
+    coveredMonths().forEach(function (m) { missAll = missAll.concat(monthStats(m).missing); });
+    $("missing-count").textContent = missAll.length;
+    $("missing-sub").innerHTML = missAll.length
+      ? "jours ouvrés sans worklog · " + esc(missAll.slice(-3).map(function (d) { return d.slice(8) + "." + d.slice(5, 7); }).join(", ")) +
+        (missAll.length > 3 ? "…" : "")
+      : "tout est saisi sur la période couverte";
+    $("tile-missing").classList.toggle("alert", missAll.length > 0);
+
+    var abs = absenceDaysThisYear();
+    var vacDays = abs.days.vac || 0;
+    $("vac-days").textContent = (Math.round(vacDays * 10) / 10).toString().replace(".", ",");
+    $("vac-sub").textContent = "sur " + state.settings.vacationDays + " jours · reste " +
+      (Math.round((state.settings.vacationDays - vacDays) * 10) / 10).toString().replace(".", ",") + " j";
+    var pct = Math.max(0, Math.min(100, 100 * vacDays / (state.settings.vacationDays || 1)));
+    $("vac-meter").innerHTML = '<i style="width:' + pct + '%;background:var(--cat-vac)"></i>';
+
+    var other = ["rec", "mal", "oth"].map(function (c) {
+      var d = abs.days[c] || 0;
+      return d ? CATS[c].label.toLowerCase() + " " + (Math.round(d * 10) / 10).toString().replace(".", ",") + " j" : null;
+    }).filter(Boolean);
+    var totalAbs = Object.keys(abs.days).reduce(function (a, c) { return a + abs.days[c]; }, 0);
+    $("abs-days").textContent = (Math.round(totalAbs * 10) / 10).toString().replace(".", ",");
+    $("abs-sub").textContent = other.length ? other.join(" · ") : "vacances uniquement";
+
+    var opening = state.settings.openingHours * 3600;
+    var swiss = function (d) { return d ? d.split("-").reverse().join(".") : "—"; };
+    $("composition").innerHTML =
+      "<div><dt>Report initial</dt><dd>" + fmtH(opening, { signed: true, zero: "0 h" }) +
+      " <small>au " + esc(swiss(state.settings.openingDate)) + "</small></dd></div>" +
+      "<div><dt>Variation depuis</dt><dd>" + fmtH(bal - opening, { signed: true, zero: "0 h" }) + "</dd></div>" +
+      "<div><dt>Données couvertes</dt><dd><small>" +
+      (state.settings.coverageFrom ? esc(swiss(state.settings.coverageFrom)) + " → " + esc(swiss(state.settings.coverageTo)) : "aucune") +
+      "</small></dd></div>";
+
+    renderSpark();
+  }
+
+  function renderSpark() {
+    var months = coveredMonths();
+    var host = $("spark");
+    if (months.length < 2) { host.innerHTML = ""; return; }
+    var pts = [], run = state.settings.openingHours * 3600;
+    months.forEach(function (m) {
+      var st = monthStats(m);
+      run += (m === monthOf(todayISO()) ? st.balanceToDate : st.balance);
+      pts.push({ m: m, v: run });
+    });
+    var W = 560, H = 56, P = 6;
+    var vals = pts.map(function (p) { return p.v; }).concat([0]);
+    var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    if (max === min) { max = min + 3600; }
+    var x = function (i) { return P + i * (W - 2 * P) / Math.max(1, pts.length - 1); };
+    var y = function (v) { return H - P - (v - min) * (H - 2 * P) / (max - min); };
+    var line = pts.map(function (p, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(p.v).toFixed(1); }).join(" ");
+    var zeroY = y(0).toFixed(1);
+    var area = line + " L" + x(pts.length - 1).toFixed(1) + " " + zeroY + " L" + x(0).toFixed(1) + " " + zeroY + " Z";
+    var last = pts[pts.length - 1];
+    var col = last.v >= 0 ? "var(--pos)" : "var(--neg)";
+    host.innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Évolution du solde cumulé">' +
+      '<path d="' + area + '" fill="' + col + '" fill-opacity="0.12" stroke="none"></path>' +
+      '<line x1="' + P + '" x2="' + (W - P) + '" y1="' + zeroY + '" y2="' + zeroY + '" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="3 3"></line>' +
+      '<path d="' + line + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>' +
+      '<circle cx="' + x(pts.length - 1).toFixed(1) + '" cy="' + y(last.v).toFixed(1) + '" r="3.5" fill="' + col + '" stroke="var(--surface)" stroke-width="2"></circle>' +
+      "</svg>" +
+      '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:2px">' +
+      "<span>" + esc(monthLabel(pts[0].m)) + "</span><span>cumul " + esc(fmtH(last.v, { signed: true })) + "</span></div>";
+  }
+
+  function renderMonths() {
+    var months = coveredMonths(), body = $("months-body");
+    if (!months.length) {
+      body.innerHTML = '<tr><td colspan="6" style="color:var(--ink-3);padding:18px">Aucune donnée. Lancez une actualisation.</td></tr>';
+      return;
+    }
+    var stats = months.map(function (m) { return monthStats(m); });
+    var maxAbs = Math.max.apply(null, stats.map(function (s) {
+      return Math.abs(s.month === monthOf(todayISO()) ? s.balanceToDate : s.balance);
+    }).concat([3600]));
+    var run = state.settings.openingHours * 3600;
+    body.innerHTML = stats.map(function (s) {
+      var isCur = s.month === monthOf(todayISO());
+      var bal = isCur ? s.balanceToDate : s.balance;
+      run += bal;
+      var w = Math.min(50, 50 * Math.abs(bal) / maxAbs);
+      var bar = '<div class="div-bar"><span class="axis"></span>' +
+        (Math.abs(bal) < 60 ? "" : '<i class="' + (bal > 0 ? "pos" : "neg") + '" style="width:' + w.toFixed(1) + '%"></i>') +
+        "</div>";
+      return '<tr class="row-click" data-month="' + s.month + '">' +
+        "<td>" + esc(monthLabel(s.month)) + (isCur ? ' <em style="font-style:normal;color:var(--ink-3);font-size:11.5px">(à date)</em>' : "") + "</td>" +
+        '<td class="num">' + fmtH(isCur ? s.dueToDate : s.due) + "</td>" +
+        '<td class="num">' + fmtH(s.credited) + "</td>" +
+        '<td class="num ' + (bal > 0 ? "cell-pos" : bal < 0 ? "cell-neg" : "") + '">' + fmtH(bal, { signed: true }) + "</td>" +
+        '<td class="div-cell">' + bar + "</td>" +
+        '<td class="num ' + (run > 0 ? "cell-pos" : run < 0 ? "cell-neg" : "") + '">' + fmtH(run, { signed: true }) + "</td>" +
+        "</tr>";
+    }).join("");
+    Array.prototype.forEach.call(body.querySelectorAll("tr[data-month]"), function (tr) {
+      tr.addEventListener("click", function () {
+        state.ui.month = tr.getAttribute("data-month");
+        render();
+        document.getElementById("days-table").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }
+
+  function renderMonthSelect() {
+    var sel = $("month-select");
+    var set = {};
+    coveredMonths().forEach(function (m) { set[m] = true; });
+    var y = new Date().getFullYear();
+    for (var i = 0; i < 12; i++) set[y + "-" + pad(i + 1)] = true;
+    set[state.ui.month] = true;
+    var list = Object.keys(set).sort();
+    sel.innerHTML = list.map(function (m) {
+      return '<option value="' + m + '"' + (m === state.ui.month ? " selected" : "") + ">" +
+        esc(monthLabel(m)) + (state.months[m] ? "" : " — pas de données") + "</option>";
+    }).join("");
+  }
+
+  function renderDays() {
+    var m = state.ui.month, st = monthStats(m), today = todayISO();
+    var body = $("days-body");
+    body.innerHTML = st.days.map(function (d) {
+      var info = d.info, delta = d.credited - d.due;
+      var showDelta = !(d.due === 0 && info.total === 0) && !(d.iso > today && info.total === 0);
+      var cls = [];
+      if (d.due === 0) cls.push("row-off");
+      if (d.iso === today) cls.push("row-today");
+      if (d.iso > today) cls.push("row-future");
+      if (st.missing.indexOf(d.iso) >= 0) cls.push("row-missing");
+      if (info.entries.length) cls.push("row-click");
+      var dow = parseISO(d.iso).getDay();
+      var hol = state.settings.holidays[d.iso];
+      var chips = Object.keys(info.abs).map(function (c) {
+        return '<span class="chip"><i class="' + CATS[c].cls + '"></i>' + esc(CATS[c].label) +
+          " " + fmtH(info.abs[c]) + "</span>";
+      }).join(" ");
+      var note = hol ? '<em>Férié — ' + esc(hol) + "</em>"
+        : (dow === 0 || dow === 6) ? "<em>Week-end</em>"
+        : info.total === 0 ? (d.iso > today ? "<em>à venir</em>" : '<em style="color:var(--warn)">aucune saisie</em>')
+        : "";
+      var barRef = Math.max(d.due, d.credited, 1);
+      var segs = [];
+      if (info.work) segs.push('<i class="work" style="width:' + (100 * info.work / barRef).toFixed(1) + '%"></i>');
+      Object.keys(info.abs).forEach(function (c) {
+        segs.push('<i style="width:' + (100 * info.abs[c] / barRef).toFixed(1) + '%;background:var(' + CATS[c].varname + ')"></i>');
+      });
+      var rest = Math.max(0, d.due - info.total);
+      if (rest > 0) segs.push('<i class="due-rest" style="width:' + (100 * rest / barRef).toFixed(1) + '%"></i>');
+
+      var row = '<tr class="' + cls.join(" ") + '" data-day="' + d.iso + '">' +
+        '<td><span class="daylabel"><b>' + DOW_FR[dow] + " " + d.iso.slice(8) + "</b>" +
+        (info.entries.length ? '<em>' + info.entries.length + " saisie" + (info.entries.length > 1 ? "s" : "") + "</em>" : "") +
+        "</span></td>" +
+        '<td class="num">' + (d.due ? fmtH(d.due) : "—") + "</td>" +
+        '<td class="num">' + (info.total ? fmtH(info.total) : "—") + "</td>" +
+        '<td class="num ' + (showDelta && delta > 0 ? "cell-pos" : showDelta && delta < 0 ? "cell-neg" : "") + '">' +
+        (showDelta ? fmtH(delta, { signed: true }) : "—") + "</td>" +
+        '<td><span class="daybar">' + segs.join("") + "</span></td>" +
+        "<td>" + (chips || note) + "</td>" +
+        "</tr>";
+      if (state.ui.openDay === d.iso && info.entries.length) {
+        row += '<tr class="detail"><td colspan="6"><div class="entries">' +
+          info.entries.slice().sort(function (a, b) { return b.s - a.s; }).map(function (e) {
+            return '<div class="entry"><code>' + esc(e.k) + "</code><span>" + esc(e.c || "—") +
+              "</span><b>" + fmtH(e.s) + "</b></div>";
+          }).join("") + "</div></td></tr>";
+      }
+      return row;
+    }).join("");
+
+    Array.prototype.forEach.call(body.querySelectorAll("tr[data-day]"), function (tr) {
+      tr.addEventListener("click", function () {
+        var d = tr.getAttribute("data-day");
+        state.ui.openDay = state.ui.openDay === d ? null : d;
+        renderDays();
+      });
+    });
+
+    var isCur = m === monthOf(todayISO());
+    var bal = isCur ? st.balanceToDate : st.balance;
+    var endOfMonth = m + "-" + pad(daysInMonth(m));
+    var cum = totalBalance(isCur ? today : endOfMonth);
+    $("days-foot").innerHTML =
+      "<tr><td>Total " + esc(monthLabel(m)) + (isCur ? " (au " + today.slice(8) + "." + today.slice(5, 7) + ")" : "") + "</td>" +
+      '<td class="num">' + fmtH(isCur ? st.dueToDate : st.due) + "</td>" +
+      '<td class="num">' + fmtH(st.credited) + "</td>" +
+      '<td class="num ' + (bal > 0 ? "cell-pos" : bal < 0 ? "cell-neg" : "") + '">' + fmtH(bal, { signed: true }) + "</td>" +
+      '<td colspan="2" style="text-align:left;font-weight:500;color:var(--ink-2)">Solde cumulé à cette date : ' +
+      '<span class="num" style="color:' + (cum >= 0 ? "var(--pos)" : "var(--neg)") + '">' + fmtH(cum, { signed: true }) + "</span></td></tr>";
+  }
+
+  function renderSettings() {
+    var s = state.settings;
+    $("set-daily").value = s.dailyHours;
+    $("set-open-date").value = s.openingDate;
+    $("set-open-hours").value = s.openingHours;
+    $("set-vac").value = s.vacationDays;
+    $("set-abs-counts").checked = !!s.absencesCount;
+
+    var keys = {};
+    Object.keys(s.actMap).forEach(function (k) { keys[k] = true; });
+    coveredMonths().forEach(function (m) {
+      var days = state.months[m].days || {};
+      Object.keys(days).forEach(function (d) {
+        (days[d].entries || []).forEach(function (e) { if (/^ACT-/.test(e.k)) keys[e.k] = true; });
+      });
+    });
+    $("actmap").innerHTML = Object.keys(keys).sort().map(function (k) {
+      return '<div class="maprow"><code>' + esc(k) + "</code>" +
+        '<select class="sel" data-act="' + esc(k) + '">' +
+        Object.keys(CATS).map(function (c) {
+          return '<option value="' + c + '"' + ((s.actMap[k] || "oth") === c ? " selected" : "") + ">" + esc(CATS[c].label) + "</option>";
+        }).join("") + "</select></div>";
+    }).join("");
+    Array.prototype.forEach.call($("actmap").querySelectorAll("select[data-act]"), function (sel) {
+      sel.addEventListener("change", function () {
+        state.settings.actMap[sel.getAttribute("data-act")] = sel.value;
+        persistSettings(); render();
+      });
+    });
+
+    var hol = s.holidays, y = state.ui.month.slice(0, 4);
+    var list = Object.keys(hol).filter(function (d) { return d.slice(0, 4) === y; }).sort();
+    $("holidays").innerHTML = list.map(function (d) {
+      return '<span class="hol">' + esc(d.slice(8) + "." + d.slice(5, 7)) + " " + esc(hol[d]) +
+        '<button data-hol="' + d + '" aria-label="Supprimer">×</button></span>';
+    }).join("") || '<span class="help" style="color:var(--ink-3)">Aucun jour férié pour ' + esc(y) + "</span>";
+    Array.prototype.forEach.call($("holidays").querySelectorAll("button[data-hol]"), function (b) {
+      b.addEventListener("click", function () {
+        delete state.settings.holidays[b.getAttribute("data-hol")];
+        persistSettings(); render();
+      });
+    });
+  }
+
+  function renderFoot() {
+    var s = state.settings;
+    $("coverage").textContent = s.coverageFrom
+      ? "Données du " + s.coverageFrom.split("-").reverse().join(".") + " au " + s.coverageTo.split("-").reverse().join(".")
+      : "Aucune donnée chargée";
+    $("freshness").textContent = s.fetchedAt
+      ? "Actualisé le " + new Date(s.fetchedAt).toLocaleString("fr-CH", { dateStyle: "short", timeStyle: "short" })
+      : "";
+  }
+
+  // ---------------------------------------------------------------- storage
+  function settingsDoc() { return { v: 1, settings: state.settings, ui: { month: state.ui.month } }; }
+
+  function persistSettings() {
+    try { localStorage.setItem(STORE_KEY + ".settings", JSON.stringify(settingsDoc())); } catch (e) {}
+    if (state.db) {
+      state.db.doc("config/settings").set(settingsDoc()).catch(function () {});
+    }
+  }
+  function persistMonth(m) {
+    var doc = state.months[m];
+    if (!doc) return Promise.resolve();
+    try { localStorage.setItem(STORE_KEY + ".month." + m, JSON.stringify(doc)); } catch (e) {}
+    if (state.db) return state.db.doc("months/" + m).set(doc).catch(function () {});
+    return Promise.resolve();
+  }
+  function loadLocal() {
+    var loaded = false;
+    try {
+      var raw = localStorage.getItem(STORE_KEY + ".settings");
+      if (raw) {
+        var d = JSON.parse(raw);
+        if (d && d.settings) { Object.assign(state.settings, d.settings); loaded = true; }
+      }
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(STORE_KEY + ".month.") === 0) {
+          var doc = JSON.parse(localStorage.getItem(k));
+          if (doc && doc.month) { state.months[doc.month] = doc; loaded = true; state.isSample = false; }
+        }
+      }
+    } catch (e) {}
+    return loaded;
+  }
+
+  async function initDb() {
+    var db = null;
+    try { db = await window.claude.use("db"); } catch (e) { db = null; }
+    if (!db) return;
+    state.db = db;
+    try {
+      var snap = await db.doc("config/settings").get();
+      if (snap.exists) {
+        var d = snap.data();
+        if (d && d.settings) Object.assign(state.settings, d.settings);
+      }
+      var q = await db.collection("months").get();
+      if (q && q.docs && q.docs.length) {
+        q.docs.forEach(function (doc) {
+          var body = doc.data();
+          if (body && body.month) state.months[body.month] = body;
+        });
+        state.isSample = false;
+      }
+      render();
+    } catch (e) { /* store unreachable — local data stays in place */ }
+  }
+
+  // ---------------------------------------------------------------- MCP
+  function parsePayload(p) {
+    if (p == null) return null;
+    if (typeof p === "string") { try { return JSON.parse(p); } catch (e) { return null; } }
+    if (typeof p === "object") {
+      if (typeof p.result === "string") { try { return JSON.parse(p.result); } catch (e) { return null; } }
+      return p;
+    }
+    return null;
+  }
+
+  function mcpErrorNotice(err) {
+    var code = (err && err.code) || "upstream_error";
+    var fix = {
+      needs_reauth: "Reconnectez <strong>MCP Jira Softcom</strong> dans claude.ai → Réglages → Connecteurs.",
+      server_not_connected: "Ajoutez le connecteur <strong>MCP Jira Softcom</strong> dans claude.ai → Réglages → Connecteurs.",
+      selection_required: "Plusieurs connecteurs portent ce nom : choisissez-en un dans l'invite de claude.ai, puis relancez.",
+      not_in_manifest: "Cette page n'a pas l'autorisation d'appeler le connecteur. Autorisez <strong>MCP Jira Softcom</strong> pour cet artefact.",
+      blocked_by_policy: "La politique de l'organisation bloque cet outil.",
+      approval_required: "Cet outil exige une approbation par appel, non supportée dans les artefacts.",
+      tool_error: "Jira a répondu par une erreur : " + esc((err && err.message) || ""),
+      bad_request: "Requête invalide : " + esc((err && err.message) || ""),
+      cancelled: "Actualisation interrompue.",
+      rate_limited: "Trop d'appels d'affilée. Patientez quelques secondes et relancez.",
+      server_unavailable: "Jira est injoignable pour l'instant. Réessayez dans un moment.",
+      not_granted: "Les connecteurs ne sont pas disponibles dans cette vue.",
+      capability_disabled: "Les connecteurs ne sont pas disponibles dans cette vue.",
+      consent_required: "Autorisez le connecteur pour cette page, puis relancez l'actualisation."
+    }[code] || ("Erreur inattendue (" + esc(code) + ") : " + esc((err && err.message) || ""));
+    return "<div><strong>Actualisation interrompue.</strong> " + fix + "</div>";
+  }
+
+  async function callJira(tool, input, signal) {
+    var attempt = 0;
+    while (true) {
+      try {
+        var res = await state.mcp.callTool(SERVER, tool, input, { cache: { refresh: true }, signal: signal });
+        return parsePayload(res.payload);
+      } catch (err) {
+        if (err && err.retryable === true && attempt === 0 && (!signal || !signal.aborted)) {
+          attempt++;
+          await new Promise(function (r) { setTimeout(r, Math.min(err.retryAfterMs || 1200, 6000) + Math.random() * 400); });
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  function setProgress(done, total, label) {
+    var p = $("progress");
+    p.hidden = false;
+    p.firstElementChild.style.width = (total ? Math.round(100 * done / total) : 4) + "%";
+    setNotice("progress", "<div><strong>Actualisation…</strong> " + esc(label) + "</div>");
+  }
+
+  async function refresh() {
+    if (state.busy) return;
+    if (!state.mcp) {
+      setNotice("mcp", "<div><strong>Connecteur indisponible.</strong> Cette vue ne peut pas appeler MCP Jira Softcom. Ouvrez l'artefact depuis claude.ai en étant connecté.</div>", "is-error");
+      return;
+    }
+    var scope = $("scope").value, today = todayISO();
+    var from, to = today;
+    if (scope === "month") {
+      from = state.ui.month + "-01";
+      to = state.ui.month + "-" + pad(daysInMonth(state.ui.month));
+      if (to > today) to = today;
+    } else if (scope === "year") {
+      from = today.slice(0, 4) + "-01-01";
+    } else {
+      from = state.settings.openingDate;
+    }
+    if (from > to) { setNotice("range", "<div>La période demandée est vide.</div>", "is-warn"); return; }
+
+    state.busy = true;
+    state.abort = new AbortController();
+    $("refresh").disabled = true;
+    $("cancel").hidden = false;
+    setNotice("mcp", null);
+    setNotice("range", null);
+
+    try {
+      // 1 — issues carrying worklogs of this user over the period
+      var keys = [], total = null, start = 0, guard = 0;
+      setProgress(0, 0, "recherche des tickets…");
+      do {
+        var page = await callJira("jira_search", {
+          jql: 'worklogAuthor = currentUser() AND worklogDate >= "' + from + '" AND worklogDate <= "' + to + '" ORDER BY key',
+          fields: "summary",
+          limit: 50,
+          start_at: start
+        }, state.abort.signal);
+        if (!page || !page.issues) throw { code: "tool_error", message: "réponse inattendue de jira_search" };
+        page.issues.forEach(function (i) { if (keys.indexOf(i.key) < 0) keys.push(i.key); });
+        total = page.total || keys.length;
+        start += 50;
+        guard++;
+      } while (keys.length < total && guard < 12 && !state.abort.signal.aborted);
+
+      if (!keys.length) {
+        setNotice("empty", "<div>Aucun worklog trouvé entre le " + esc(from) + " et le " + esc(to) + ".</div>", "is-warn");
+      }
+
+      // 2 — worklogs per issue, filtered to this user and this period
+      var days = {}, done = 0, failures = [];
+      async function fetchIssue(key) {
+        try {
+          var data = await callJira("jira_get_worklog", { issue_key: key }, state.abort.signal);
+          var logs = (data && data.worklogs) || [];
+          logs.forEach(function (w) {
+            if (String(w.author || "").trim().toLowerCase() !== WORKER.toLowerCase()) return;
+            var d = String(w.started || "").slice(0, 10);
+            if (!d || d < from || d > to) return;
+            (days[d] = days[d] || []).push({
+              k: key,
+              c: String(w.comment || "").replace(/\s+/g, " ").trim().slice(0, 240),
+              s: +w.time_spent_seconds || 0
+            });
+          });
+        } catch (err) {
+          if (err && err.code === "cancelled") throw err;
+          failures.push({ key: key, err: err });
+        } finally {
+          done++;
+          setProgress(done, keys.length, done + " / " + keys.length + " tickets");
+        }
+      }
+      var queue = keys.slice();
+      await Promise.all([0, 1, 2, 3].map(async function () {
+        while (queue.length && !state.abort.signal.aborted) {
+          await fetchIssue(queue.shift());
+        }
+      }));
+      if (state.abort.signal.aborted) throw { code: "cancelled", message: "annulé" };
+
+      // 3 — rebuild affected months
+      var touched = {};
+      var cur = parseISO(from), end = parseISO(to);
+      while (cur <= end) { touched[iso(cur).slice(0, 7)] = true; cur = addDays(cur, 1); }
+      Object.keys(touched).forEach(function (m) {
+        var md = {};
+        Object.keys(days).forEach(function (d) { if (d.slice(0, 7) === m) md[d] = { entries: days[d] }; });
+        state.months[m] = { month: m, days: md, fetchedAt: Date.now() };
+      });
+      state.isSample = false;
+      state.settings.fetchedAt = Date.now();
+      state.settings.coverageFrom = (!state.settings.coverageFrom || from < state.settings.coverageFrom) && scope !== "month"
+        ? from : (state.settings.coverageFrom || from);
+      state.settings.coverageTo = to > (state.settings.coverageTo || "") ? to : state.settings.coverageTo;
+
+      await Promise.all(Object.keys(touched).map(persistMonth));
+      persistSettings();
+
+      setNotice("progress", null);
+      setNotice("empty", null);
+      if (failures.length) {
+        setNotice("partial", "<div><strong>" + failures.length + " ticket(s) non lus.</strong> Les heures de " +
+          esc(failures.slice(0, 4).map(function (f) { return f.key; }).join(", ")) +
+          (failures.length > 4 ? "…" : "") + " manquent dans ce calcul. Relancez l'actualisation.</div>", "is-warn");
+      } else {
+        setNotice("partial", null);
+      }
+      render();
+    } catch (err) {
+      setNotice("progress", null);
+      if (err && err.code === "cancelled") setNotice("partial", "<div>Actualisation annulée. Les données affichées sont celles du dernier chargement.</div>", "is-warn");
+      else setNotice("partial", mcpErrorNotice(err), "is-error");
+    } finally {
+      state.busy = false;
+      $("refresh").disabled = false;
+      $("cancel").hidden = true;
+      $("progress").hidden = true;
+      state.abort = null;
+    }
+  }
+
+  // ---------------------------------------------------------------- wiring
+  function wire() {
+    $("refresh").addEventListener("click", refresh);
+    $("cancel").addEventListener("click", function () { if (state.abort) state.abort.abort(); });
+    $("month-select").addEventListener("change", function (e) {
+      state.ui.month = e.target.value; state.ui.openDay = null; persistSettings(); render();
+    });
+    $("asof-date").addEventListener("change", function (e) {
+      if (e.target.value) { state.ui.asof = e.target.value; render(); }
+    });
+    $("asof-today").addEventListener("click", function () { state.ui.asof = todayISO(); render(); });
+
+    function bindSetting(id, key, cast) {
+      $(id).addEventListener("change", function (e) {
+        var v = cast(e.target.type === "checkbox" ? e.target.checked : e.target.value);
+        if (v === null || (typeof v === "number" && isNaN(v))) { render(); return; }
+        state.settings[key] = v; persistSettings(); render();
+      });
+    }
+    bindSetting("set-daily", "dailyHours", function (v) { var n = parseFloat(v); return n > 0 && n <= 24 ? n : null; });
+    bindSetting("set-open-date", "openingDate", function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; });
+    bindSetting("set-open-hours", "openingHours", function (v) { return parseFloat(v) || 0; });
+    bindSetting("set-vac", "vacationDays", function (v) { var n = parseFloat(v); return n >= 0 ? n : null; });
+    bindSetting("set-abs-counts", "absencesCount", function (v) { return !!v; });
+
+    $("hol-add").addEventListener("click", function () {
+      var d = $("hol-date").value, l = $("hol-label").value.trim() || "Férié";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+      state.settings.holidays[d] = l;
+      $("hol-date").value = ""; $("hol-label").value = "";
+      persistSettings(); render();
+    });
+    $("hol-reset").addEventListener("click", function () {
+      state.settings.holidays = defaultHolidays(); persistSettings(); render();
+    });
+  }
+
+  // ---------------------------------------------------------------- boot
+  function boot() {
+    var hadLocal = loadLocal();
+    if (!hadLocal) buildSample();
+    wire();
+    render();
+
+    initDb();
+    (async function () {
+      try {
+        var mcp = await window.claude.use("mcp");
+        state.mcp = mcp;
+        if (!mcp) {
+          setNotice("mcp", "<div><strong>Connecteur indisponible dans cette vue.</strong> Ouvrez la page depuis claude.ai (session connectée) pour pouvoir actualiser.</div>", "is-warn");
+        }
+      } catch (e) { state.mcp = null; }
+    })();
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>
