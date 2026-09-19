@@ -297,9 +297,10 @@
       <span id="worker-name">François Charrière · Jira Tempo</span>
     </div>
     <select class="sel" id="scope" aria-label="Période à actualiser">
+      <option value="delta" selected>Delta (40 derniers jours)</option>
       <option value="month">Mois affiché</option>
-      <option value="year" selected>Année en cours</option>
-      <option value="since">Depuis le report initial</option>
+      <option value="history">Historique manquant</option>
+      <option value="all">Tout recharger</option>
     </select>
     <button class="btn btn-primary" id="refresh">↻ Actualiser</button>
     <button class="btn btn-ghost" id="cancel" hidden>Annuler</button>
@@ -473,6 +474,8 @@
   var SERVER = "MCP Jira Softcom";
   var WORKER = "François Charrière";
   var STORE_KEY = "solde-tempo.v1";
+  var START_DATE = "2024-08-01";   // entrée en fonction
+  var EDIT_WINDOW_DAYS = 40;       // les saisies Tempo bougent jusqu'à 40 jours en arrière
   var CATS = {
     vac: { label: "Vacances", cls: "dot-vac", varname: "--cat-vac" },
     rec: { label: "Récupération", cls: "dot-rec", varname: "--cat-rec" },
@@ -579,9 +582,10 @@
   // ---------------------------------------------------------------- state
   var state = {
     settings: {
-      settingsVersion: 2,
+      settingsVersion: 3,
       dailyHours: 8.5,
-      openingDate: String(new Date().getFullYear()) + "-01-01",
+      openingDate: START_DATE,
+      loadedMonths: [],
       openingHours: 0,
       vacationDays: 25,
       absencesCount: true,
@@ -768,10 +772,25 @@
         html: "<div><strong>Données d'exemple.</strong> Les chiffres ci-dessous sont fictifs — cliquez sur <strong>Actualiser</strong> pour charger vos worklogs Tempo.</div>"
       });
     }
+    if (!state.isSample && !state.busy) {
+      var miss = missingMonths();
+      if (miss.length) {
+        extra.push({
+          kind: "",
+          html: '<div><strong>' + miss.length + ' mois non chargé' + (miss.length > 1 ? "s" : "") +
+            '</strong> depuis le ' + esc(state.settings.openingDate.split("-").reverse().join(".")) +
+            ' (' + esc(monthLabel(miss[0])) + (miss.length > 1 ? " → " + esc(monthLabel(miss[miss.length - 1])) : "") +
+            '). Le solde cumulé les ignore.</div>' +
+            '<button class="btn notice-act" id="load-history">Charger l\'historique</button>'
+        });
+      }
+    }
     var all = extra.concat(notices);
     el.innerHTML = all.map(function (n) {
       return '<div class="notice ' + n.kind + '">' + n.html + "</div>";
     }).join("");
+    var lh = document.getElementById("load-history");
+    if (lh) lh.addEventListener("click", function () { refresh("history"); });
   }
 
   function renderHero() {
@@ -830,9 +849,7 @@
       "<div><dt>Report initial</dt><dd>" + fmtH(opening, { signed: true, zero: "0 h" }) +
       " <small>au " + esc(swiss(state.settings.openingDate)) + "</small></dd></div>" +
       "<div><dt>Variation depuis</dt><dd>" + fmtH(bal - opening, { signed: true, zero: "0 h" }) + "</dd></div>" +
-      "<div><dt>Données couvertes</dt><dd><small>" +
-      (state.settings.coverageFrom ? esc(swiss(state.settings.coverageFrom)) + " → " + esc(swiss(state.settings.coverageTo)) : "aucune") +
-      "</small></dd></div>";
+      "<div><dt>Données couvertes</dt><dd><small>" + esc(coverageText()) + "</small></dd></div>";
 
     renderSpark();
   }
@@ -910,13 +927,12 @@
     var sel = $("month-select");
     var set = {};
     coveredMonths().forEach(function (m) { set[m] = true; });
-    var y = new Date().getFullYear();
-    for (var i = 0; i < 12; i++) set[y + "-" + pad(i + 1)] = true;
+    monthsBetween(monthOf(state.settings.openingDate), monthOf(todayISO())).forEach(function (m) { set[m] = true; });
     set[state.ui.month] = true;
     var list = Object.keys(set).sort();
     sel.innerHTML = list.map(function (m) {
       return '<option value="' + m + '"' + (m === state.ui.month ? " selected" : "") + ">" +
-        esc(monthLabel(m)) + (state.months[m] ? "" : " — pas de données") + "</option>";
+        esc(monthLabel(m)) + (isLoaded(m) ? "" : " — non chargé") + "</option>";
     }).join("");
   }
 
@@ -1039,10 +1055,19 @@
     });
   }
 
+  function coverageText() {
+    var loaded = (state.settings.loadedMonths || []).slice().sort();
+    if (!loaded.length) return "aucune";
+    var to = state.settings.coverageTo || (loaded[loaded.length - 1] + "-01");
+    return (loaded[0] + "-01").split("-").reverse().join(".") + " → " + to.split("-").reverse().join(".");
+  }
+
   function renderFoot() {
     var s = state.settings;
-    $("coverage").textContent = s.coverageFrom
-      ? "Données du " + s.coverageFrom.split("-").reverse().join(".") + " au " + s.coverageTo.split("-").reverse().join(".")
+    var loaded = (s.loadedMonths || []).length;
+    var expected = monthsBetween(monthOf(s.openingDate), monthOf(todayISO())).length;
+    $("coverage").textContent = loaded
+      ? loaded + " mois chargés sur " + expected + " · " + coverageText()
       : "Aucune donnée chargée";
     $("freshness").textContent = s.fetchedAt
       ? "Actualisé le " + new Date(s.fetchedAt).toLocaleString("fr-CH", { dateStyle: "short", timeStyle: "short" })
@@ -1058,6 +1083,11 @@
       if (!out.dailyHours || Math.abs(out.dailyHours - 8.4) < 0.001) out.dailyHours = 8.5;
       out.settingsVersion = 2;
     }
+    if ((out.settingsVersion || 1) < 3) {
+      if (!out.openingDate || /-01-01$/.test(out.openingDate)) out.openingDate = START_DATE;
+      out.settingsVersion = 3;
+    }
+    if (!out.loadedMonths) out.loadedMonths = [];
     if (!out.holidayYears) {
       var years = {};
       Object.keys(out.holidays || {}).forEach(function (d) { years[+d.slice(0, 4)] = true; });
@@ -1097,6 +1127,7 @@
         }
       }
     } catch (e) {}
+    if (loaded) reconcileLoaded();
     return loaded;
   }
 
@@ -1118,6 +1149,7 @@
           if (body && body.month) state.months[body.month] = body;
         });
         state.isSample = false;
+        reconcileLoaded();
       }
       render();
     } catch (e) { /* store unreachable — local data stays in place */ }
@@ -1155,19 +1187,42 @@
     return "<div><strong>Actualisation interrompue.</strong> " + fix + "</div>";
   }
 
+  var worklogCache = {};                 // issue key -> this user's worklogs (page session)
+  var pacing = { gap: 160, concurrency: 2 };
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  var lastCallAt = 0;
+  function paced(fn, signal) {
+    var wait = Math.max(0, pacing.gap - (Date.now() - lastCallAt));
+    return (wait ? sleep(wait) : Promise.resolve()).then(function () {
+      if (signal && signal.aborted) throw { code: "cancelled", message: "annulé" };
+      lastCallAt = Date.now();
+      return fn();
+    });
+  }
+
+  /** One connector call, spaced out and retried. When the connector pushes
+   *  back the page slows itself down instead of failing the whole run — a
+   *  historical load has to survive a rate limit, not restart after it. */
   async function callJira(tool, input, signal) {
-    var attempt = 0;
-    while (true) {
+    var delays = [2000, 6000, 15000];
+    for (var attempt = 0; ; attempt++) {
       try {
-        var res = await state.mcp.callTool(SERVER, tool, input, { cache: { refresh: true }, signal: signal });
+        var res = await paced(function () {
+          return state.mcp.callTool(SERVER, tool, input, { cache: { refresh: true }, signal: signal });
+        }, signal);
         return parsePayload(res.payload);
       } catch (err) {
-        if (err && err.retryable === true && attempt === 0 && (!signal || !signal.aborted)) {
-          attempt++;
-          await new Promise(function (r) { setTimeout(r, Math.min(err.retryAfterMs || 1200, 6000) + Math.random() * 400); });
-          continue;
-        }
-        throw err;
+        var code = err && err.code;
+        if (code === "cancelled") throw err;
+        var soft = code === "rate_limited" || code === "server_unavailable" || (err && err.retryable === true);
+        if (!soft || attempt >= delays.length) throw err;
+        pacing.gap = Math.min(1500, Math.round(pacing.gap * 2));
+        pacing.concurrency = 1;
+        var wait = Math.max(delays[attempt], err.retryAfterMs || 0) + Math.round(Math.random() * 500);
+        setNotice("progress", "<div><strong>Le connecteur limite les appels.</strong> Reprise automatique dans " +
+          Math.round(wait / 1000) + " s, au ralenti. Les mois déjà chargés sont conservés.</div>", "is-warn");
+        await sleep(wait);
       }
     }
   }
@@ -1176,121 +1231,174 @@
     var p = $("progress");
     p.hidden = false;
     p.firstElementChild.style.width = (total ? Math.round(100 * done / total) : 4) + "%";
-    setNotice("progress", "<div><strong>Actualisation…</strong> " + esc(label) + "</div>");
+    setNotice("progress", "<div><strong>Chargement…</strong> " + esc(label) + "</div>");
   }
 
-  async function refresh() {
+  // -------------------------------------------------------- month bookkeeping
+  function monthsBetween(a, b) {
+    var out = [], y = +a.slice(0, 4), m = +a.slice(5, 7);
+    while (out.length < 400) {
+      var k = y + "-" + pad(m);
+      if (k > b) break;
+      out.push(k);
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return out;
+  }
+  /** Oldest month that can still change: Tempo entries are edited up to
+   *  EDIT_WINDOW days back, so everything before that is frozen. */
+  function liveFromMonth() { return iso(addDays(new Date(), -EDIT_WINDOW_DAYS)).slice(0, 7); }
+  function markLoaded(m) {
+    var l = state.settings.loadedMonths || (state.settings.loadedMonths = []);
+    if (l.indexOf(m) < 0) l.push(m);
+  }
+  function isLoaded(m) { return (state.settings.loadedMonths || []).indexOf(m) >= 0; }
+  function missingMonths() {
+    return monthsBetween(monthOf(state.settings.openingDate), monthOf(todayISO()))
+      .filter(function (m) { return !isLoaded(m); });
+  }
+  /** Months already in the store count as loaded (data from an older version). */
+  function reconcileLoaded() {
+    Object.keys(state.months).forEach(markLoaded);
+  }
+
+  // -------------------------------------------------------- fetching
+  async function searchIssuesForMonth(m, signal) {
+    var today = todayISO();
+    var from = m + "-01", to = m + "-" + pad(daysInMonth(m));
+    if (from > today) return [];
+    if (to > today) to = today;
+    var keys = [], total = 0, start = 0, guard = 0;
+    do {
+      var page = await callJira("jira_search", {
+        jql: 'worklogAuthor = currentUser() AND worklogDate >= "' + from + '" AND worklogDate <= "' + to + '" ORDER BY key',
+        fields: "summary", limit: 50, start_at: start
+      }, signal);
+      if (!page || !page.issues) throw { code: "tool_error", message: "réponse inattendue de jira_search" };
+      page.issues.forEach(function (i) { if (keys.indexOf(i.key) < 0) keys.push(i.key); });
+      total = page.total || keys.length;
+      start += 50; guard++;
+    } while (keys.length < total && guard < 10 && !(signal && signal.aborted));
+    return keys;
+  }
+
+  /** A worklog call returns the whole issue history, so one call per issue
+   *  serves every month — the cache is what keeps a 2-year load affordable. */
+  async function worklogsFor(key, signal) {
+    if (worklogCache[key]) return worklogCache[key];
+    var data = await callJira("jira_get_worklog", { issue_key: key }, signal);
+    worklogCache[key] = ((data && data.worklogs) || []).filter(function (w) {
+      return String(w.author || "").trim().toLowerCase() === WORKER.toLowerCase();
+    }).map(function (w) {
+      return {
+        d: String(w.started || "").slice(0, 10),
+        c: String(w.comment || "").replace(/\s+/g, " ").trim().slice(0, 200),
+        s: +w.time_spent_seconds || 0
+      };
+    });
+    return worklogCache[key];
+  }
+
+  function buildMonthFromCache(m) {
+    var days = {};
+    Object.keys(worklogCache).forEach(function (key) {
+      worklogCache[key].forEach(function (w) {
+        if (!w.d || w.d.slice(0, 7) !== m) return;
+        (days[w.d] = days[w.d] || { entries: [] }).entries.push({ k: key, c: w.c, s: w.s });
+      });
+    });
+    state.months[m] = { month: m, days: days, fetchedAt: Date.now() };
+  }
+
+  /** Load month by month and commit each one as it lands, so an interrupted
+   *  run keeps everything it already read and resumes where it stopped. */
+  async function loadMonths(list) {
+    var failures = [];
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i];
+      if (state.abort.signal.aborted) break;
+      setProgress(i, list.length, monthLabel(m) + " — " + (i + 1) + "/" + list.length);
+      try {
+        var keys = await searchIssuesForMonth(m, state.abort.signal);
+        var fresh = keys.filter(function (k) { return !worklogCache[k]; });
+        var queue = fresh.slice(), read = 0, iM = i, mM = m, nF = fresh.length;
+        var workers = [];
+        for (var w = 0; w < Math.max(1, pacing.concurrency); w++) {
+          workers.push((async function () {
+            while (queue.length && !state.abort.signal.aborted) {
+              await worklogsFor(queue.shift(), state.abort.signal);
+              read++;
+              setProgress(iM + read / Math.max(1, nF), list.length,
+                monthLabel(mM) + " — " + read + "/" + nF + " tickets");
+            }
+          })());
+        }
+        await Promise.all(workers);
+        if (state.abort.signal.aborted) break;
+        buildMonthFromCache(m);
+        markLoaded(m);
+        state.isSample = false;
+        state.settings.fetchedAt = Date.now();
+        var end = m + "-" + pad(daysInMonth(m));
+        if (end > todayISO()) end = todayISO();
+        if (!state.settings.coverageTo || end > state.settings.coverageTo) state.settings.coverageTo = end;
+        await persistMonth(m);
+        persistSettings();
+        render();
+      } catch (err) {
+        if (err && err.code === "cancelled") throw err;
+        failures.push({ month: m, err: err });
+        if (failures.length >= 3) throw err;   // the connector is down, not this month
+      }
+    }
+    return failures;
+  }
+
+  async function refresh(mode) {
     if (state.busy) return;
     if (!state.mcp) {
       setNotice("mcp", "<div><strong>Connecteur indisponible.</strong> Cette vue ne peut pas appeler MCP Jira Softcom. Ouvrez l'artefact depuis claude.ai en étant connecté.</div>", "is-error");
       return;
     }
-    var scope = $("scope").value, today = todayISO();
-    var from, to = today;
-    if (scope === "month") {
-      from = state.ui.month + "-01";
-      to = state.ui.month + "-" + pad(daysInMonth(state.ui.month));
-      if (to > today) to = today;
-    } else if (scope === "year") {
-      from = today.slice(0, 4) + "-01-01";
-    } else {
-      from = state.settings.openingDate;
+    mode = typeof mode === "string" ? mode : $("scope").value;
+    var today = todayISO(), list;
+    if (mode === "month") list = [state.ui.month];
+    else if (mode === "history") list = missingMonths();
+    else if (mode === "all") list = monthsBetween(monthOf(state.settings.openingDate), monthOf(today));
+    else list = monthsBetween(liveFromMonth(), monthOf(today));           // delta
+    list = list.filter(function (m) { return m <= monthOf(today) && m >= "2000-01"; });
+
+    if (!list.length) {
+      setNotice("partial", "<div><strong>Rien à charger.</strong> " +
+        (mode === "history" ? "Tous les mois depuis le " + esc(state.settings.openingDate.split("-").reverse().join(".")) + " sont déjà chargés."
+                            : "La période demandée est vide.") + "</div>", "is-warn");
+      return;
     }
-    if (from > to) { setNotice("range", "<div>La période demandée est vide.</div>", "is-warn"); return; }
 
     state.busy = true;
     state.abort = new AbortController();
+    pacing = { gap: 160, concurrency: 2 };
     $("refresh").disabled = true;
     $("cancel").hidden = false;
-    setNotice("mcp", null);
-    setNotice("range", null);
+    setNotice("mcp", null); setNotice("partial", null); setNotice("empty", null);
 
     try {
-      // 1 — issues carrying worklogs of this user over the period
-      var keys = [], total = null, start = 0, guard = 0;
-      setProgress(0, 0, "recherche des tickets…");
-      do {
-        var page = await callJira("jira_search", {
-          jql: 'worklogAuthor = currentUser() AND worklogDate >= "' + from + '" AND worklogDate <= "' + to + '" ORDER BY key',
-          fields: "summary",
-          limit: 50,
-          start_at: start
-        }, state.abort.signal);
-        if (!page || !page.issues) throw { code: "tool_error", message: "réponse inattendue de jira_search" };
-        page.issues.forEach(function (i) { if (keys.indexOf(i.key) < 0) keys.push(i.key); });
-        total = page.total || keys.length;
-        start += 50;
-        guard++;
-      } while (keys.length < total && guard < 12 && !state.abort.signal.aborted);
-
-      if (!keys.length) {
-        setNotice("empty", "<div>Aucun worklog trouvé entre le " + esc(from) + " et le " + esc(to) + ".</div>", "is-warn");
-      }
-
-      // 2 — worklogs per issue, filtered to this user and this period
-      var days = {}, done = 0, failures = [];
-      async function fetchIssue(key) {
-        try {
-          var data = await callJira("jira_get_worklog", { issue_key: key }, state.abort.signal);
-          var logs = (data && data.worklogs) || [];
-          logs.forEach(function (w) {
-            if (String(w.author || "").trim().toLowerCase() !== WORKER.toLowerCase()) return;
-            var d = String(w.started || "").slice(0, 10);
-            if (!d || d < from || d > to) return;
-            (days[d] = days[d] || []).push({
-              k: key,
-              c: String(w.comment || "").replace(/\s+/g, " ").trim().slice(0, 240),
-              s: +w.time_spent_seconds || 0
-            });
-          });
-        } catch (err) {
-          if (err && err.code === "cancelled") throw err;
-          failures.push({ key: key, err: err });
-        } finally {
-          done++;
-          setProgress(done, keys.length, done + " / " + keys.length + " tickets");
-        }
-      }
-      var queue = keys.slice();
-      await Promise.all([0, 1, 2, 3].map(async function () {
-        while (queue.length && !state.abort.signal.aborted) {
-          await fetchIssue(queue.shift());
-        }
-      }));
-      if (state.abort.signal.aborted) throw { code: "cancelled", message: "annulé" };
-
-      // 3 — rebuild affected months
-      var touched = {};
-      var cur = parseISO(from), end = parseISO(to);
-      while (cur <= end) { touched[iso(cur).slice(0, 7)] = true; cur = addDays(cur, 1); }
-      Object.keys(touched).forEach(function (m) {
-        var md = {};
-        Object.keys(days).forEach(function (d) { if (d.slice(0, 7) === m) md[d] = { entries: days[d] }; });
-        state.months[m] = { month: m, days: md, fetchedAt: Date.now() };
-      });
-      state.isSample = false;
-      state.settings.fetchedAt = Date.now();
-      state.settings.coverageFrom = (!state.settings.coverageFrom || from < state.settings.coverageFrom) && scope !== "month"
-        ? from : (state.settings.coverageFrom || from);
-      state.settings.coverageTo = to > (state.settings.coverageTo || "") ? to : state.settings.coverageTo;
-
-      await Promise.all(Object.keys(touched).map(persistMonth));
-      persistSettings();
-
+      var failures = await loadMonths(list);
       setNotice("progress", null);
-      setNotice("empty", null);
       if (failures.length) {
-        setNotice("partial", "<div><strong>" + failures.length + " ticket(s) non lus.</strong> Les heures de " +
-          esc(failures.slice(0, 4).map(function (f) { return f.key; }).join(", ")) +
-          (failures.length > 4 ? "…" : "") + " manquent dans ce calcul. Relancez l'actualisation.</div>", "is-warn");
-      } else {
-        setNotice("partial", null);
+        setNotice("partial", "<div><strong>" + failures.length + " mois non chargé(s) :</strong> " +
+          esc(failures.map(function (f) { return monthLabel(f.month); }).join(", ")) +
+          ". Relancez — les mois déjà chargés ne seront pas relus.</div>", "is-warn");
       }
       render();
     } catch (err) {
       setNotice("progress", null);
-      if (err && err.code === "cancelled") setNotice("partial", "<div>Actualisation annulée. Les données affichées sont celles du dernier chargement.</div>", "is-warn");
-      else setNotice("partial", mcpErrorNotice(err), "is-error");
+      if (err && err.code === "cancelled") {
+        setNotice("partial", "<div><strong>Chargement interrompu.</strong> Les mois déjà chargés sont conservés — relancez pour reprendre où ça s'est arrêté.</div>", "is-warn");
+      } else {
+        setNotice("partial", mcpErrorNotice(err), "is-error");
+      }
+      render();
     } finally {
       state.busy = false;
       $("refresh").disabled = false;
