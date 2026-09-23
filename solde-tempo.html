@@ -283,6 +283,21 @@
   .hol button { border: 0; background: none; cursor: pointer; color: var(--ink-3); font-size: 14px; line-height: 1; padding: 0 2px; }
   .hol button:hover { color: var(--neg); }
 
+  .snipwrap { position: relative; }
+  .snipwrap pre {
+    margin: 0; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--ink-2);
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.5;
+    max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .snipwrap .btn { position: absolute; top: 8px; right: 8px; padding: 4px 10px; font-size: 12px; }
+  textarea.inp { width: 100%; font-family: var(--mono); font-size: 12px; resize: vertical; }
+  .src-badge {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--ink-3);
+  }
+  .src-badge.is-tempo { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
   .foot { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 6px 18px; }
 
   .progress { height: 3px; background: var(--surface-3); border-radius: 999px; overflow: hidden; margin-top: 10px; }
@@ -379,6 +394,7 @@
   <section>
     <div class="sec-head">
       <h2>Détail du mois</h2>
+      <span class="src-badge" id="due-source">dû calculé</span>
       <span class="spacer"></span>
       <select class="sel" id="month-select" aria-label="Mois affiché"></select>
     </div>
@@ -406,6 +422,33 @@
       <span>Cliquez une journée pour voir les worklogs.</span>
     </div>
   </section>
+
+  <details class="settings" id="import">
+    <summary>Importer depuis Tempo — le dû réel et tout l'historique en une fois</summary>
+    <div class="settings-body">
+      <div class="field">
+        <span class="help">Tempo expose vos heures dues jour par jour (fériés et taux inclus) et tous vos worklogs
+          sur une période, en deux appels. Cette page ne peut pas les appeler elle-même — mais votre navigateur, oui.</span>
+      </div>
+      <ol style="margin:0;padding-left:20px;font-size:13px;color:var(--ink-2);display:grid;gap:4px">
+        <li>Ouvrez <b>jira.softcom.pro</b> dans un onglet, puis la console (F12).</li>
+        <li>Collez le script ci-dessous : il copie le résultat dans le presse-papier.</li>
+        <li>Revenez ici, collez, puis <b>Importer</b>.</li>
+      </ol>
+      <div class="snipwrap">
+        <pre id="snippet"></pre>
+        <button class="btn" id="copy-snip">Copier</button>
+      </div>
+      <div class="field">
+        <label for="import-json">JSON copié depuis la console</label>
+        <textarea class="inp" id="import-json" rows="3" spellcheck="false" placeholder='{"v":1,"worker":"fch",…}'></textarea>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="do-import">Importer</button>
+        <span id="import-status" style="font-size:12.5px;color:var(--ink-2)"></span>
+      </div>
+    </div>
+  </details>
 
   <details class="settings" id="settings">
     <summary>Paramètres de calcul</summary>
@@ -474,6 +517,7 @@
   var SERVER = "MCP Jira Softcom";
   var WORKER = "François Charrière";
   var STORE_KEY = "solde-tempo.v1";
+  var JIRA_USER = "fch";
   var START_DATE = "2024-08-01";   // entrée en fonction
   var EDIT_WINDOW_DAYS = 40;       // les saisies Tempo bougent jusqu'à 40 jours en arrière
   var CATS = {
@@ -640,7 +684,11 @@
   function holLabel(h) { return (h && typeof h === "object") ? (h.label || "Férié") : h; }
   function holOff(h) { return (h && typeof h === "object" && typeof h.off === "number") ? h.off : 1; }
 
+  /** Tempo's own required seconds win wherever they were imported; the
+   *  contractual computation below is only the fallback for uncovered months. */
   function dueSeconds(isoDate) {
+    var md = state.months[monthOf(isoDate)];
+    if (md && md.due && md.due[isoDate] != null) return md.due[isoDate];
     var dow = parseISO(isoDate).getDay();
     if (dow === 0 || dow === 6) return 0;
     var h = state.settings.holidays[isoDate];
@@ -753,6 +801,7 @@
     renderMonths();
     renderMonthSelect();
     renderDays();
+    renderDueSource();
     renderSettings();
     renderFoot();
   }
@@ -949,12 +998,15 @@
       if (st.missing.indexOf(d.iso) >= 0) cls.push("row-missing");
       if (info.entries.length) cls.push("row-click");
       var dow = parseISO(d.iso).getDay();
+      var mdoc = state.months[m] || {};
+      var nwType = mdoc.nw && mdoc.nw[d.iso];
       var hol = state.settings.holidays[d.iso];
       var chips = Object.keys(info.abs).map(function (c) {
         return '<span class="chip"><i class="' + CATS[c].cls + '"></i>' + esc(CATS[c].label) +
           " " + fmtH(info.abs[c]) + "</span>";
       }).join(" ");
-      var note = hol ? "<em>" + (holOff(hol) < 1 ? "Demi-jour" : "Férié") + " — " + esc(holLabel(hol)) + "</em>"
+      var note = (nwType && nwType !== "NON_WORKING_DAY" && d.due === 0) ? "<em>Férié — Tempo</em>"
+        : hol ? "<em>" + (holOff(hol) < 1 ? "Demi-jour" : "Férié") + " — " + esc(holLabel(hol)) + "</em>"
         : (dow === 0 || dow === 6) ? "<em>Week-end</em>"
         : info.total === 0 ? (d.iso > today ? "<em>à venir</em>" : '<em style="color:var(--warn)">aucune saisie</em>')
         : "";
@@ -1007,6 +1059,17 @@
       '<td class="num ' + (bal > 0 ? "cell-pos" : bal < 0 ? "cell-neg" : "") + '">' + fmtH(bal, { signed: true }) + "</td>" +
       '<td colspan="2" style="text-align:left;font-weight:500;color:var(--ink-2)">Solde cumulé à cette date : ' +
       '<span class="num" style="color:' + (cum >= 0 ? "var(--pos)" : "var(--neg)") + '">' + fmtH(cum, { signed: true }) + "</span></td></tr>";
+  }
+
+  function renderDueSource() {
+    var md = state.months[state.ui.month];
+    var tempo = md && md.due && Object.keys(md.due).length;
+    var el = $("due-source");
+    el.textContent = tempo ? "dû : Tempo" : "dû : calculé (" + fmtH(dailySeconds()) + "/jour)";
+    el.classList.toggle("is-tempo", !!tempo);
+    el.title = tempo
+      ? "Heures dues lues dans Tempo pour ce mois — fériés et taux inclus."
+      : "Heures dues reconstituées : jours ouvrés × heures contractuelles, moins les fériés de la liste. Importez Tempo pour la valeur officielle.";
   }
 
   function renderSettings() {
@@ -1307,7 +1370,11 @@
         (days[w.d] = days[w.d] || { entries: [] }).entries.push({ k: key, c: w.c, s: w.s });
       });
     });
-    state.months[m] = { month: m, days: days, fetchedAt: Date.now() };
+    var prev = state.months[m] || {};
+    state.months[m] = {
+      month: m, days: days, fetchedAt: Date.now(),
+      due: prev.due || {}, nw: prev.nw || {}, source: prev.source || "jira"
+    };
   }
 
   /** Load month by month and commit each one as it lands, so an interrupted
@@ -1408,8 +1475,84 @@
     }
   }
 
+  // ---------------------------------------------------------------- import Tempo
+  function tempoSnippet() {
+    var from = state.settings.openingDate, to = todayISO();
+    return '(async()=>{const U="' + JIRA_USER + '",F="' + from + '",T="' + to + '";const W=[],D=[];\n' +
+      'const get=async u=>{const r=await fetch(u,{headers:{Accept:"application/json"}});if(!r.ok)throw new Error(r.status+" "+u);return r.json()};\n' +
+      'for(let y=+F.slice(0,4);y<=+T.slice(0,4);y++){const f=(y+"-01-01")<F?F:y+"-01-01",t=(y+"-12-31")>T?T:y+"-12-31";\n' +
+      ' (await get(`/rest/tempo-timesheets/3/worklogs/?dateFrom=${f}&dateTo=${t}&username=${U}`)).forEach(x=>W.push([\n' +
+      '   (x.dateStarted||"").slice(0,10),(x.issue&&(x.issue.key||x.issue.issueKey))||x.issueKey||"?",x.timeSpentSeconds|0,\n' +
+      '   (x.comment||"").replace(/\\s+/g," ").trim().slice(0,160)]));\n' +
+      ' ((await get(`/rest/tempo-core/1/user/schedule/?user=${U}&from=${f}&to=${t}`)).days||[]).forEach(d=>D.push([d.date,d.requiredSeconds|0,d.type||""]));}\n' +
+      'const out=JSON.stringify({v:1,worker:U,from:F,to:T,w:W,d:D});window.__solde=out;\n' +
+      'try{copy(out)}catch(e){console.log("copy() indisponible — tapez : copy(window.__solde)")}\n' +
+      'console.log("Copié :",W.length,"worklogs,",D.length,"jours,",Math.round(out.length/1024),"Ko");})()';
+  }
+
+  function importTempo(text) {
+    var data = JSON.parse(text);
+    if (!data || data.v !== 1 || !Array.isArray(data.w) || !Array.isArray(data.d)) {
+      throw new Error("format non reconnu — relancez le script et recopiez tout le JSON");
+    }
+    var months = {}, unknown = 0, iso10 = /^\d{4}-\d{2}-\d{2}$/;
+    function bucket(d) {
+      var k = d.slice(0, 7);
+      return (months[k] = months[k] || { month: k, days: {}, due: {}, nw: {}, fetchedAt: Date.now(), source: "tempo" });
+    }
+    data.w.forEach(function (r) {
+      var d = r[0], key = r[1] || "?", s = +r[2] || 0, c = r[3] || "";
+      if (!iso10.test(d) || !s) return;
+      if (key === "?") unknown++;
+      var b = bucket(d);
+      (b.days[d] = b.days[d] || { entries: [] }).entries.push({ k: key, c: c, s: s });
+    });
+    data.d.forEach(function (r) {
+      var d = r[0], s = +r[1] || 0, type = r[2] || "";
+      if (!iso10.test(d)) return;
+      var b = bucket(d);
+      b.due[d] = s;
+      if (type && type !== "WORKING_DAY") b.nw[d] = type;
+    });
+    var keys = Object.keys(months);
+    if (!keys.length) throw new Error("aucune journée exploitable dans le JSON");
+
+    keys.forEach(function (m) { state.months[m] = months[m]; markLoaded(m); });
+    state.isSample = false;
+    state.settings.fetchedAt = Date.now();
+    if (data.to && (!state.settings.coverageTo || data.to > state.settings.coverageTo)) state.settings.coverageTo = data.to;
+    if (data.from && data.from < state.settings.openingDate) state.settings.openingDate = data.from;
+    persistSettings();
+    Promise.all(keys.map(persistMonth));
+    render();
+    return { months: keys.length, worklogs: data.w.length, days: data.d.length, unknown: unknown };
+  }
+
   // ---------------------------------------------------------------- wiring
   function wire() {
+    $("snippet").textContent = tempoSnippet();
+    $("copy-snip").addEventListener("click", function () {
+      var btn = $("copy-snip");
+      try {
+        navigator.clipboard.writeText($("snippet").textContent).then(function () {
+          btn.textContent = "Copié"; setTimeout(function () { btn.textContent = "Copier"; }, 1600);
+        }, function () { btn.textContent = "Sélectionnez le texte"; });
+      } catch (e) { btn.textContent = "Sélectionnez le texte"; }
+    });
+    $("do-import").addEventListener("click", function () {
+      var st = $("import-status"), raw = $("import-json").value.trim();
+      if (!raw) { st.textContent = "Collez d'abord le JSON."; return; }
+      try {
+        var r = importTempo(raw);
+        $("import-json").value = "";
+        st.innerHTML = "<span style=\"color:var(--pos)\">Importé : " + r.months + " mois, " +
+          r.worklogs + " worklogs, dû Tempo sur " + r.days + " jours." +
+          (r.unknown ? " " + r.unknown + " worklog(s) sans clé de ticket — dites-le-moi." : "") + "</span>";
+        $("import").open = false;
+      } catch (e) {
+        st.innerHTML = "<span style=\"color:var(--neg)\">Échec : " + esc(e.message) + "</span>";
+      }
+    });
     $("refresh").addEventListener("click", refresh);
     $("cancel").addEventListener("click", function () { if (state.abort) state.abort.abort(); });
     $("month-select").addEventListener("change", function (e) {
