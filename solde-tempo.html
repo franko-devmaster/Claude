@@ -283,6 +283,14 @@
   .hol button { border: 0; background: none; cursor: pointer; color: var(--ink-3); font-size: 14px; line-height: 1; padding: 0 2px; }
   .hol button:hover { color: var(--neg); }
 
+  .step { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+  .step h3 { font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+  .step p { margin: 0; font-size: 13px; color: var(--ink-2); }
+  .step code { font-family: var(--mono); font-size: 12px; background: var(--surface); padding: 1px 4px; border-radius: 4px; }
+  .step-n {
+    display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700;
+  }
   .snipwrap { position: relative; }
   .snipwrap pre {
     margin: 0; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border);
@@ -430,18 +438,23 @@
         <span class="help">Tempo expose vos heures dues jour par jour (fériés et taux inclus) et tous vos worklogs
           sur une période, en deux appels. Cette page ne peut pas les appeler elle-même — mais votre navigateur, oui.</span>
       </div>
-      <ol style="margin:0;padding-left:20px;font-size:13px;color:var(--ink-2);display:grid;gap:4px">
-        <li>Ouvrez <b>jira.softcom.pro</b> dans un onglet, puis la console (F12).</li>
-        <li>Collez le script ci-dessous : il copie le résultat dans le presse-papier.</li>
-        <li>Revenez ici, collez, puis <b>Importer</b>.</li>
-      </ol>
-      <div class="snipwrap">
-        <pre id="snippet"></pre>
-        <button class="btn" id="copy-snip">Copier</button>
+      <div class="step">
+        <h3><span class="step-n">1</span> Dans Jira, pas ici</h3>
+        <p>Ouvrez <b>jira.softcom.pro</b> dans un onglet du navigateur, appuyez sur <b>F12</b>, onglet
+          <b>Console</b>. Copiez le script ci-dessous, collez-le dans cette console, <b>Entrée</b>.
+          Il répond <i>« Copié : … worklogs, … jours »</i> et met le résultat dans votre presse-papier.</p>
+        <div class="snipwrap">
+          <pre id="snippet"></pre>
+          <button class="btn" id="copy-snip">Copier le script</button>
+        </div>
       </div>
-      <div class="field">
-        <label for="import-json">JSON copié depuis la console</label>
-        <textarea class="inp" id="import-json" rows="3" spellcheck="false" placeholder='{"v":1,"worker":"fch",…}'></textarea>
+      <div class="step">
+        <h3><span class="step-n">2</span> Revenez ici</h3>
+        <p>Collez ce que le script a copié — ça commence par <code>{"v":1</code> et c'est très long.
+          <b>Pas le script lui-même.</b></p>
+        <div class="field">
+          <textarea class="inp" id="import-json" rows="3" spellcheck="false" placeholder='{"v":1,"worker":"fch","from":"2024-08-01",…'></textarea>
+        </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary" id="do-import">Importer</button>
@@ -1541,7 +1554,13 @@
     });
     $("do-import").addEventListener("click", function () {
       var st = $("import-status"), raw = $("import-json").value.trim();
-      if (!raw) { st.textContent = "Collez d'abord le JSON."; return; }
+      if (!raw) { st.textContent = "Collez d'abord le résultat du script."; return; }
+      if (raw.charAt(0) !== "{") {
+        st.innerHTML = '<span style="color:var(--neg)">C\'est le <b>script</b> que vous avez collé, pas son résultat. ' +
+          'Exécutez-le d\'abord dans la console de jira.softcom.pro (F12 → Console), puis collez ici ce qu\'il a copié — ' +
+          'ça commence par <code>{"v":1</code>.</span>';
+        return;
+      }
       try {
         var r = importTempo(raw);
         $("import-json").value = "";
