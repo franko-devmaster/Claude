@@ -450,11 +450,18 @@
       </div>
       <div class="step">
         <h3><span class="step-n">2</span> Revenez ici</h3>
-        <p>Collez ce que le script a copié — ça commence par <code>{"v":1</code> et c'est très long.
-          <b>Pas le script lui-même.</b></p>
+        <p>Le script télécharge un fichier <code>solde-tempo.json</code>. Sélectionnez-le :</p>
         <div class="field">
-          <textarea class="inp" id="import-json" rows="3" spellcheck="false" placeholder='{"v":1,"worker":"fch","from":"2024-08-01",…'></textarea>
+          <input class="inp" type="file" id="import-file" accept="application/json,.json">
         </div>
+        <details>
+          <summary style="cursor:pointer;font-size:12.5px;color:var(--ink-2)">Pas de fichier ? coller à la place</summary>
+          <p style="margin-top:8px">Dans la console, tapez <code>copy(window.__solde)</code> puis collez ici.
+            Ça commence par <code>{"v":1</code> — <b>pas le script lui-même.</b></p>
+          <div class="field">
+            <textarea class="inp" id="import-json" rows="3" spellcheck="false" placeholder='{"v":1,"worker":"fch","from":"2024-08-01",…'></textarea>
+          </div>
+        </details>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary" id="do-import">Importer</button>
@@ -1499,8 +1506,10 @@
       '   (x.comment||"").replace(/\\s+/g," ").trim().slice(0,160)]));\n' +
       ' ((await get(`/rest/tempo-core/1/user/schedule/?user=${U}&from=${f}&to=${t}`)).days||[]).forEach(d=>D.push([d.date,d.requiredSeconds|0,d.type||""]));}\n' +
       'const out=JSON.stringify({v:1,worker:U,from:F,to:T,w:W,d:D});window.__solde=out;\n' +
-      'try{copy(out)}catch(e){console.log("copy() indisponible — tapez : copy(window.__solde)")}\n' +
-      'console.log("Copié :",W.length,"worklogs,",D.length,"jours,",Math.round(out.length/1024),"Ko");})()';
+      'const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([out],{type:"application/json"}));\n' +
+      'a.download="solde-tempo.json";a.click();\n' +
+      'console.log("Fichier solde-tempo.json téléchargé :",W.length,"worklogs,",D.length,"jours,",Math.round(out.length/1024),"Ko");\n' +
+      'console.log("Téléchargement bloqué ? tapez : copy(window.__solde)");})()';
   }
 
   function importTempo(text) {
@@ -1552,25 +1561,34 @@
         }, function () { btn.textContent = "Sélectionnez le texte"; });
       } catch (e) { btn.textContent = "Sélectionnez le texte"; }
     });
-    $("do-import").addEventListener("click", function () {
-      var st = $("import-status"), raw = $("import-json").value.trim();
-      if (!raw) { st.textContent = "Collez d'abord le résultat du script."; return; }
+    function runImport(raw) {
+      var st = $("import-status");
+      raw = (raw || "").trim();
+      if (!raw) { st.textContent = "Choisissez le fichier, ou collez le résultat du script."; return; }
       if (raw.charAt(0) !== "{") {
-        st.innerHTML = '<span style="color:var(--neg)">C\'est le <b>script</b> que vous avez collé, pas son résultat. ' +
-          'Exécutez-le d\'abord dans la console de jira.softcom.pro (F12 → Console), puis collez ici ce qu\'il a copié — ' +
-          'ça commence par <code>{"v":1</code>.</span>';
+        st.innerHTML = '<span style="color:var(--neg)">C\'est le <b>script</b>, pas son résultat. Exécutez-le dans la console de jira.softcom.pro (F12 → Console) : il télécharge <code>solde-tempo.json</code>, que vous sélectionnez ci-dessus.</span>';
         return;
       }
       try {
         var r = importTempo(raw);
         $("import-json").value = "";
-        st.innerHTML = "<span style=\"color:var(--pos)\">Importé : " + r.months + " mois, " +
-          r.worklogs + " worklogs, dû Tempo sur " + r.days + " jours." +
+        st.innerHTML = '<span style="color:var(--pos)">Importé : ' + r.months + " mois, " + r.worklogs +
+          " worklogs, dû Tempo sur " + r.days + " jours." +
           (r.unknown ? " " + r.unknown + " worklog(s) sans clé de ticket — dites-le-moi." : "") + "</span>";
         $("import").open = false;
       } catch (e) {
-        st.innerHTML = "<span style=\"color:var(--neg)\">Échec : " + esc(e.message) + "</span>";
+        st.innerHTML = '<span style="color:var(--neg)">Échec : ' + esc(e.message) + "</span>";
       }
+    }
+    $("do-import").addEventListener("click", function () { runImport($("import-json").value); });
+    $("import-file").addEventListener("change", function (e) {
+      var f = e.target.files && e.target.files[0];
+      if (!f) return;
+      $("import-status").textContent = "Lecture de " + f.name + "…";
+      var rd = new FileReader();
+      rd.onload = function () { runImport(String(rd.result)); e.target.value = ""; };
+      rd.onerror = function () { $("import-status").innerHTML = '<span style="color:var(--neg)">Fichier illisible.</span>'; };
+      rd.readAsText(f);
     });
     $("refresh").addEventListener("click", refresh);
     $("cancel").addEventListener("click", function () { if (state.abort) state.abort.abort(); });
