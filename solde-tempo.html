@@ -25,6 +25,7 @@
     --warn-soft:     #fbeed2;
     /* absence categories — validated all-pairs, light surface */
     --cat-vac:       #2a78d6;
+    --mid:           #3b5bdb;
     --cat-rec:       #1baf7a;
     --cat-mal:       #eb6834;
     --cat-oth:       #7c837b;
@@ -55,6 +56,7 @@
       --warn:          #d8a441;
       --warn-soft:     #2f2612;
       --cat-vac:       #3987e5;
+      --mid:           #7c94f4;
       --cat-rec:       #199e70;
       --cat-mal:       #d95926;
       --cat-oth:       #8b938a;
@@ -82,6 +84,7 @@
     --warn:          #d8a441;
     --warn-soft:     #2f2612;
     --cat-vac:       #3987e5;
+    --mid:           #7c94f4;
     --cat-rec:       #199e70;
     --cat-mal:       #d95926;
     --cat-oth:       #8b938a;
@@ -247,6 +250,8 @@
   .div-bar i { position: absolute; top: 3px; height: 10px; border-radius: 3px; }
   .div-bar i.pos { background: var(--pos); left: 50%; }
   .div-bar i.neg { background: var(--neg); right: 50%; }
+  .div-bar i.mid { background: var(--mid); left: 50%; }
+  .cell-mid { color: var(--mid); }
 
   .daybar { display: flex; gap: 2px; align-items: center; height: 10px; min-width: 120px; }
   .daybar i { height: 10px; border-radius: 2px; display: block; }
@@ -380,7 +385,14 @@
   <section>
     <div class="sec-head">
       <h2>Par mois</h2>
-      <span class="hint">dû contractuel, temps saisi dans Tempo, écart et cumul</span>
+      <span class="hint">dû Tempo, temps saisi, écart et cumul · rouge &lt; 0 · bleu 0 à +5 h · vert &gt; +5 h</span>
+      <span class="spacer"></span>
+      <select class="sel" id="months-range" aria-label="Période affichée">
+        <option value="6">6 derniers mois</option>
+        <option value="12">12 derniers mois</option>
+        <option value="24">24 derniers mois</option>
+        <option value="all">Tout</option>
+      </select>
     </div>
     <div class="tablewrap">
       <table id="months-table">
@@ -526,7 +538,7 @@
   <div class="foot">
     <span id="coverage">Aucune donnée chargée</span>
     <span id="freshness"></span>
-    <span>Source : worklogs Jira (jira.softcom.pro) via le connecteur MCP Jira Softcom</span>
+    <span>Source : Tempo (jira.softcom.pro) — worklogs et heures dues</span>
   </div>
 </div>
 
@@ -754,33 +766,41 @@
   function monthStats(m) {
     var n = daysInMonth(m), today = todayISO();
     var st = {
-      month: m, due: 0, dueToDate: 0, credited: 0, work: 0, abs: {},
+      month: m, due: 0, dueToDate: 0, credited: 0, creditedToDate: 0, work: 0, abs: {},
       missing: [], days: []
     };
     for (var d = 1; d <= n; d++) {
       var key = m + "-" + pad(d);
       var due = dueSeconds(key), info = dayInfo(key), cred = creditedSeconds(info);
       st.due += due;
-      if (key <= today) st.dueToDate += due;
       st.credited += cred;
+      // « À date » s'arrête à hier : la journée en cours n'est pas finie.
+      if (key < today) { st.dueToDate += due; st.creditedToDate += cred; }
       st.work += info.work;
       Object.keys(info.abs).forEach(function (c) { st.abs[c] = (st.abs[c] || 0) + info.abs[c]; });
-      if (due > 0 && info.total === 0 && key <= today && key >= state.settings.openingDate) st.missing.push(key);
+      if (due > 0 && info.total === 0 && key < today && key >= state.settings.openingDate) st.missing.push(key);
       st.days.push({ iso: key, due: due, info: info, credited: cred });
     }
     st.balance = st.credited - st.due;
-    st.balanceToDate = st.credited - st.dueToDate;
+    st.balanceToDate = st.creditedToDate - st.dueToDate;
     return st;
   }
+
+  /** Couleur d'un solde mensuel : négatif, de 0 à +5 h, au-delà de +5 h. */
+  function balanceLevel(sec) { return sec <= -60 ? "neg" : sec <= 5 * 3600 ? "mid" : "pos"; }
+  function balanceColor(sec) { return "var(--" + balanceLevel(sec) + ")"; }
 
   function coveredMonths() {
     return Object.keys(state.months).sort();
   }
 
-  /** Cumulative balance from openingDate through a cut-off date. */
+  /** Cumulative balance from openingDate through a cut-off date. The day in
+   *  progress never counts: a cut-off of today or later stops at yesterday. */
   function totalBalance(cutoffISO) {
     var s = state.settings.openingHours * 3600;
     var from = state.settings.openingDate;
+    var today = todayISO();
+    if (cutoffISO >= today) cutoffISO = iso(addDays(parseISO(today), -1));
     var months = coveredMonths();
     for (var i = 0; i < months.length; i++) {
       var m = months[i], n = daysInMonth(m);
@@ -877,9 +897,9 @@
     var isCurrent = state.ui.month === monthOf(todayISO());
     var shown = isCurrent ? st.balanceToDate : st.balance;
     mb.textContent = fmtH(shown, { signed: true, zero: "0 h" });
-    mb.style.color = Math.abs(shown) < 60 ? "" : (shown > 0 ? "var(--pos)" : "var(--neg)");
-    $("month-sub").textContent = monthLabel(state.ui.month) + " · saisi " + fmtH(st.credited) +
-      " / dû " + fmtH(isCurrent ? st.dueToDate : st.due) + (isCurrent ? " à date" : "");
+    mb.style.color = balanceColor(shown);
+    $("month-sub").textContent = monthLabel(state.ui.month) + " · saisi " + fmtH(isCurrent ? st.creditedToDate : st.credited) +
+      " / dû " + fmtH(isCurrent ? st.dueToDate : st.due) + (isCurrent ? " jusqu'à hier" : "");
     var ref = Math.max(st.due, st.credited, 1);
     $("month-meter").innerHTML =
       '<i style="width:' + (100 * st.work / ref) + '%;background:var(--accent)"></i>' +
@@ -961,26 +981,33 @@
       body.innerHTML = '<tr><td colspan="6" style="color:var(--ink-3);padding:18px">Aucune donnée. Lancez une actualisation.</td></tr>';
       return;
     }
-    var stats = months.map(function (m) { return monthStats(m); });
-    var maxAbs = Math.max.apply(null, stats.map(function (s) {
-      return Math.abs(s.month === monthOf(todayISO()) ? s.balanceToDate : s.balance);
-    }).concat([3600]));
+    // Cumul calculé dans l'ordre chronologique, affichage du plus récent au plus ancien.
     var run = state.settings.openingHours * 3600;
+    var stats = months.map(function (m) {
+      var s = monthStats(m), isCur = m === monthOf(todayISO());
+      s.isCur = isCur;
+      s.shown = isCur ? s.balanceToDate : s.balance;
+      run += s.shown;
+      s.run = run;
+      return s;
+    });
+    var range = state.ui.range || "12";
+    if (range !== "all") stats = stats.slice(-(+range));
+    stats.reverse();
+    var maxAbs = Math.max.apply(null, stats.map(function (s) { return Math.abs(s.shown); }).concat([3600]));
     body.innerHTML = stats.map(function (s) {
-      var isCur = s.month === monthOf(todayISO());
-      var bal = isCur ? s.balanceToDate : s.balance;
-      run += bal;
+      var bal = s.shown, lvl = balanceLevel(bal);
       var w = Math.min(50, 50 * Math.abs(bal) / maxAbs);
       var bar = '<div class="div-bar"><span class="axis"></span>' +
-        (Math.abs(bal) < 60 ? "" : '<i class="' + (bal > 0 ? "pos" : "neg") + '" style="width:' + w.toFixed(1) + '%"></i>') +
+        (Math.abs(bal) < 60 ? "" : '<i class="' + lvl + '" style="width:' + w.toFixed(1) + '%"></i>') +
         "</div>";
       return '<tr class="row-click" data-month="' + s.month + '">' +
-        "<td>" + esc(monthLabel(s.month)) + (isCur ? ' <em style="font-style:normal;color:var(--ink-3);font-size:11.5px">(à date)</em>' : "") + "</td>" +
-        '<td class="num">' + fmtH(isCur ? s.dueToDate : s.due) + "</td>" +
-        '<td class="num">' + fmtH(s.credited) + "</td>" +
-        '<td class="num ' + (bal > 0 ? "cell-pos" : bal < 0 ? "cell-neg" : "") + '">' + fmtH(bal, { signed: true }) + "</td>" +
+        "<td>" + esc(monthLabel(s.month)) + (s.isCur ? ' <em style="font-style:normal;color:var(--ink-3);font-size:11.5px">(jusqu\'à hier)</em>' : "") + "</td>" +
+        '<td class="num">' + fmtH(s.isCur ? s.dueToDate : s.due) + "</td>" +
+        '<td class="num">' + fmtH(s.isCur ? s.creditedToDate : s.credited) + "</td>" +
+        '<td class="num cell-' + lvl + '">' + fmtH(bal, { signed: true }) + "</td>" +
         '<td class="div-cell">' + bar + "</td>" +
-        '<td class="num ' + (run > 0 ? "cell-pos" : run < 0 ? "cell-neg" : "") + '">' + fmtH(run, { signed: true }) + "</td>" +
+        '<td class="num ' + (s.run > 0 ? "cell-pos" : s.run < 0 ? "cell-neg" : "") + '">' + fmtH(s.run, { signed: true }) + "</td>" +
         "</tr>";
     }).join("");
     Array.prototype.forEach.call(body.querySelectorAll("tr[data-month]"), function (tr) {
@@ -1030,6 +1057,13 @@
         : (dow === 0 || dow === 6) ? "<em>Week-end</em>"
         : info.total === 0 ? (d.iso > today ? "<em>à venir</em>" : '<em style="color:var(--warn)">aucune saisie</em>')
         : "";
+      // Jour ouvré passé : vert au-delà de 9 h saisies, rouge sous 8 h.
+      // Jour non ouvré travaillé : signe de l'écart. Aujourd'hui et le futur : neutre.
+      var dayCls = "";
+      if (d.iso < today) {
+        if (d.due > 0) dayCls = info.total > 9 * 3600 ? "cell-pos" : info.total < 8 * 3600 ? "cell-neg" : "";
+        else if (info.total > 0) dayCls = "cell-pos";
+      }
       var barRef = Math.max(d.due, d.credited, 1);
       var segs = [];
       if (info.work) segs.push('<i class="work" style="width:' + (100 * info.work / barRef).toFixed(1) + '%"></i>');
@@ -1044,8 +1078,8 @@
         (info.entries.length ? '<em>' + info.entries.length + " saisie" + (info.entries.length > 1 ? "s" : "") + "</em>" : "") +
         "</span></td>" +
         '<td class="num">' + (d.due ? fmtH(d.due) : "—") + "</td>" +
-        '<td class="num">' + (info.total ? fmtH(info.total) : "—") + "</td>" +
-        '<td class="num ' + (showDelta && delta > 0 ? "cell-pos" : showDelta && delta < 0 ? "cell-neg" : "") + '">' +
+        '<td class="num ' + dayCls + '">' + (info.total ? fmtH(info.total) : "—") + "</td>" +
+        '<td class="num ' + (showDelta ? dayCls : "") + '">' +
         (showDelta ? fmtH(delta, { signed: true }) : "—") + "</td>" +
         '<td><span class="daybar">' + segs.join("") + "</span></td>" +
         "<td>" + (chips || note) + "</td>" +
@@ -1072,12 +1106,18 @@
     var bal = isCur ? st.balanceToDate : st.balance;
     var endOfMonth = m + "-" + pad(daysInMonth(m));
     var cum = totalBalance(isCur ? today : endOfMonth);
+    var yest = iso(addDays(parseISO(today), -1));
+    // Barre du solde mensuel : pleine à ±20 h.
+    var lvl = balanceLevel(bal), bw = Math.min(50, 50 * Math.abs(bal) / Math.max(20 * 3600, Math.abs(bal)));
+    var monthBar = '<div class="div-bar" title="Solde du mois"><span class="axis"></span>' +
+      (Math.abs(bal) < 60 ? "" : '<i class="' + lvl + '" style="width:' + bw.toFixed(1) + '%"></i>') + "</div>";
     $("days-foot").innerHTML =
-      "<tr><td>Total " + esc(monthLabel(m)) + (isCur ? " (au " + today.slice(8) + "." + today.slice(5, 7) + ")" : "") + "</td>" +
+      "<tr><td>Total " + esc(monthLabel(m)) + (isCur ? " (au " + yest.slice(8) + "." + yest.slice(5, 7) + ")" : "") + "</td>" +
       '<td class="num">' + fmtH(isCur ? st.dueToDate : st.due) + "</td>" +
-      '<td class="num">' + fmtH(st.credited) + "</td>" +
-      '<td class="num ' + (bal > 0 ? "cell-pos" : bal < 0 ? "cell-neg" : "") + '">' + fmtH(bal, { signed: true }) + "</td>" +
-      '<td colspan="2" style="text-align:left;font-weight:500;color:var(--ink-2)">Solde cumulé à cette date : ' +
+      '<td class="num">' + fmtH(isCur ? st.creditedToDate : st.credited) + "</td>" +
+      '<td class="num cell-' + lvl + '">' + fmtH(bal, { signed: true }) + "</td>" +
+      '<td style="min-width:140px">' + monthBar + "</td>" +
+      '<td style="text-align:left;font-weight:500;color:var(--ink-2)">Solde cumulé à cette date : ' +
       '<span class="num" style="color:' + (cum >= 0 ? "var(--pos)" : "var(--neg)") + '">' + fmtH(cum, { signed: true }) + "</span></td></tr>";
   }
 
@@ -1225,17 +1265,42 @@
         var d = snap.data();
         if (d && d.settings) Object.assign(state.settings, migrateSettings(d.settings));
       }
-      var q = await db.collection("months").get();
-      if (q && q.docs && q.docs.length) {
-        q.docs.forEach(function (doc) {
-          var body = doc.data();
-          if (body && body.month) state.months[body.month] = body;
-        });
-        state.isSample = false;
-        reconcileLoaded();
+      // Un mois par lecture : l'historique complet dépasse ce qu'une seule
+      // requête sur la collection peut renvoyer.
+      var ids = monthsBetween(monthOf(state.settings.openingDate), monthOf(todayISO()));
+      (state.settings.loadedMonths || []).forEach(function (m) { if (ids.indexOf(m) < 0) ids.push(m); });
+      var queue = ids.slice(), got = 0, failed = [];
+      async function readMonth(m) {
+        try { return await db.doc("months/" + m).get(); }
+        catch (e) {
+          await sleep(400 + Math.round(Math.random() * 400));
+          return db.doc("months/" + m).get();
+        }
       }
+      async function worker() {
+        while (queue.length) {
+          var m = queue.shift(), snapM;
+          try { snapM = await readMonth(m); } catch (e) { failed.push(m); continue; }
+          if (!snapM.exists) continue;
+          var body = snapM.data();
+          if (!body || !body.month) continue;
+          state.months[body.month] = body;
+          got++;
+          try { localStorage.setItem(STORE_KEY + ".month." + body.month, JSON.stringify(body)); } catch (e) {}
+        }
+      }
+      await Promise.all([worker(), worker(), worker()]);
+      if (got) { state.isSample = false; reconcileLoaded(); }
+      setNotice("db", failed.length
+        ? "<div><strong>" + failed.length + " mois n'ont pas pu être lus</strong> (" +
+          esc(failed.sort().map(monthLabel).join(", ")) + "). Leurs chiffres peuvent être anciens — rechargez la page.</div>"
+        : null, "is-warn");
       render();
-    } catch (e) { /* store unreachable — local data stays in place */ }
+    } catch (e) {
+      setNotice("db", "<div><strong>Données partagées inaccessibles.</strong> Les chiffres affichés viennent de la copie " +
+        "gardée par ce navigateur et peuvent être anciens. Rechargez la page.</div>", "is-warn");
+      render();
+    }
   }
 
   // ---------------------------------------------------------------- MCP
@@ -1270,7 +1335,7 @@
     return "<div><strong>Actualisation interrompue.</strong> " + fix + "</div>";
   }
 
-  var worklogCache = {};                 // issue key -> this user's worklogs (page session)
+  var worklogCache = {};                 // issue key -> this user's worklogs (one refresh run)
   var pacing = { gap: 160, concurrency: 2 };
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
@@ -1443,10 +1508,6 @@
 
   async function refresh(mode) {
     if (state.busy) return;
-    if (!state.mcp) {
-      setNotice("mcp", "<div><strong>Connecteur indisponible.</strong> Cette vue ne peut pas appeler MCP Jira Softcom. Ouvrez l'artefact depuis claude.ai en étant connecté.</div>", "is-error");
-      return;
-    }
     mode = typeof mode === "string" ? mode : $("scope").value;
     var today = todayISO(), list;
     if (mode === "month") list = [state.ui.month];
@@ -1454,7 +1515,23 @@
     else if (mode === "all") list = monthsBetween(monthOf(state.settings.openingDate), monthOf(today));
     else list = monthsBetween(liveFromMonth(), monthOf(today));           // delta
     list = list.filter(function (m) { return m <= monthOf(today) && m >= "2000-01"; });
+    // Le connecteur MCP renvoie moins de saisies que Tempo : un mois lu dans
+    // Tempo n'est jamais remplacé par cette lecture moins complète.
+    var tempoMonths = list.filter(function (m) { return state.months[m] && state.months[m].source === "tempo"; });
+    list = list.filter(function (m) { return tempoMonths.indexOf(m) < 0; });
 
+    if (!list.length && tempoMonths.length) {
+      var at = state.settings.fetchedAt
+        ? new Date(state.settings.fetchedAt).toLocaleString("fr-CH", { dateStyle: "short", timeStyle: "short" }) : "—";
+      setNotice("partial", "<div><strong>Données lues dans Tempo le " + esc(at) + ".</strong> " +
+        "Cette page ne peut pas interroger Tempo elle-même. Pour les actualiser, demandez à Claude : " +
+        "<i>« mets à jour le solde Tempo »</i>.</div>", "");
+      return;
+    }
+    if (!state.mcp) {
+      setNotice("mcp", "<div><strong>Connecteur indisponible.</strong> Cette vue ne peut pas appeler MCP Jira Softcom. Ouvrez l'artefact depuis claude.ai en étant connecté.</div>", "is-error");
+      return;
+    }
     if (!list.length) {
       setNotice("partial", "<div><strong>Rien à charger.</strong> " +
         (mode === "history" ? "Tous les mois depuis le " + esc(state.settings.openingDate.split("-").reverse().join(".")) + " sont déjà chargés."
@@ -1464,6 +1541,9 @@
 
     state.busy = true;
     state.abort = new AbortController();
+    // Fresh run, fresh reads: the cache spares repeat calls inside one run,
+    // but across runs it would hide worklogs edited in Tempo in between.
+    worklogCache = {};
     pacing = { gap: 160, concurrency: 2 };
     $("refresh").disabled = true;
     $("cancel").hidden = false;
@@ -1590,6 +1670,13 @@
       rd.onerror = function () { $("import-status").innerHTML = '<span style="color:var(--neg)">Fichier illisible.</span>'; };
       rd.readAsText(f);
     });
+    try { state.ui.range = localStorage.getItem(STORE_KEY + ".range") || "12"; } catch (e) { state.ui.range = "12"; }
+    $("months-range").value = state.ui.range;
+    $("months-range").addEventListener("change", function (e) {
+      state.ui.range = e.target.value;
+      try { localStorage.setItem(STORE_KEY + ".range", state.ui.range); } catch (err) {}
+      renderMonths();
+    });
     $("refresh").addEventListener("click", refresh);
     $("cancel").addEventListener("click", function () { if (state.abort) state.abort.abort(); });
     $("month-select").addEventListener("change", function (e) {
@@ -1652,3 +1739,5 @@
   else boot();
 })();
 </script>
+
+</body></html>
