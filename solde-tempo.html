@@ -174,6 +174,7 @@
   .balance-unit { font-size: 15px; color: var(--ink-2); }
   .asof { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 13px; color: var(--ink-2); }
   .asof label { color: var(--ink-3); }
+  .asof .stale { font-size: 12px; color: var(--warn); font-weight: 500; }
   .composition {
     margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
     display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
@@ -351,6 +352,7 @@
         <label for="asof-date">Solde au</label>
         <input class="inp num" type="date" id="asof-date">
         <button class="btn btn-ghost" id="asof-today" style="padding:4px 8px;font-size:12px">Aujourd'hui</button>
+        <span id="asof-note" class="stale" hidden></span>
       </div>
       <dl class="composition" id="composition"></dl>
       <div class="spark" id="spark"></div>
@@ -385,7 +387,7 @@
   <section>
     <div class="sec-head">
       <h2>Par mois</h2>
-      <span class="hint">dû Tempo, temps saisi, écart et cumul · rouge &lt; 0 · bleu 0 à +5 h · vert &gt; +5 h</span>
+      <span class="hint">dû Tempo, temps saisi, écart et cumul · rouge &lt; 0 · bleu 0 à +5 h · vert &gt; +5 h · les mois à venir ne montrent que ce qui y est posé</span>
       <span class="spacer"></span>
       <select class="sel" id="months-range" aria-label="Période affichée">
         <option value="6">6 derniers mois</option>
@@ -578,6 +580,18 @@
   function monthOf(isoDate) { return isoDate.slice(0, 7); }
   function monthLabel(m) { var p = m.split("-"); return MONTHS_FR[+p[1] - 1] + " " + p[0]; }
   function daysInMonth(m) { var p = m.split("-"); return new Date(+p[0], +p[1], 0).getDate(); }
+  /** A month entirely ahead of us: it holds bookings, never a balance. */
+  function isFutureMonth(m) { return m > monthOf(todayISO()); }
+  /** The cut-off every balance uses: the day in progress is not finished. */
+  function balanceCutoff() { return iso(addDays(parseISO(todayISO()), -1)); }
+  /** Beyond the last load the page knows nothing — it must not read those
+   *  days as hours never worked. A balance stops at the data, not at the
+   *  calendar. */
+  function dataCutoff() {
+    var y = balanceCutoff(), c = state.settings.coverageTo;
+    return (c && c < y) ? c : y;
+  }
+  function isStale() { return dataCutoff() < balanceCutoff(); }
 
   function fmtH(seconds, opts) {
     opts = opts || {};
@@ -764,7 +778,7 @@
   }
 
   function monthStats(m) {
-    var n = daysInMonth(m), today = todayISO();
+    var n = daysInMonth(m), cut = dataCutoff();
     var st = {
       month: m, due: 0, dueToDate: 0, credited: 0, creditedToDate: 0, work: 0, abs: {},
       missing: [], days: []
@@ -774,15 +788,18 @@
       var due = dueSeconds(key), info = dayInfo(key), cred = creditedSeconds(info);
       st.due += due;
       st.credited += cred;
-      // « À date » s'arrête à hier : la journée en cours n'est pas finie.
-      if (key < today) { st.dueToDate += due; st.creditedToDate += cred; }
+      // « À date » s'arrête à la dernière journée couverte par les données.
+      if (key <= cut) { st.dueToDate += due; st.creditedToDate += cred; }
       st.work += info.work;
       Object.keys(info.abs).forEach(function (c) { st.abs[c] = (st.abs[c] || 0) + info.abs[c]; });
-      if (due > 0 && info.total === 0 && key < today && key >= state.settings.openingDate) st.missing.push(key);
+      if (due > 0 && info.total === 0 && key <= cut && key >= state.settings.openingDate) st.missing.push(key);
       st.days.push({ iso: key, due: due, info: info, credited: cred });
     }
     st.balance = st.credited - st.due;
     st.balanceToDate = st.creditedToDate - st.dueToDate;
+    // Un mois à cheval sur la limite n'a qu'un solde partiel.
+    st.isPartial = (m + "-01") <= cut && (m + "-" + pad(n)) > cut;
+    st.cut = cut;
     return st;
   }
 
@@ -794,13 +811,13 @@
     return Object.keys(state.months).sort();
   }
 
-  /** Cumulative balance from openingDate through a cut-off date. The day in
-   *  progress never counts: a cut-off of today or later stops at yesterday. */
+  /** Cumulative balance from openingDate through a cut-off date, never past
+   *  the last day the data covers. */
   function totalBalance(cutoffISO) {
     var s = state.settings.openingHours * 3600;
     var from = state.settings.openingDate;
-    var today = todayISO();
-    if (cutoffISO >= today) cutoffISO = iso(addDays(parseISO(today), -1));
+    var cut = dataCutoff();
+    if (cutoffISO > cut) cutoffISO = cut;
     var months = coveredMonths();
     for (var i = 0; i < months.length; i++) {
       var m = months[i], n = daysInMonth(m);
@@ -813,16 +830,23 @@
     return s;
   }
 
+  /** Absences of the year, split at the balance cut-off: what is already
+   *  taken, and what is only booked. Booked days still consume the
+   *  entitlement, so the vacation counter has to show both. */
   function absenceDaysThisYear() {
-    var y = state.ui.asof.slice(0, 4), per = {}, dsec = dailySeconds();
+    var y = state.ui.asof.slice(0, 4), per = {}, soon = {}, dsec = dailySeconds();
+    var cut = balanceCutoff();
     coveredMonths().forEach(function (m) {
       if (m.slice(0, 4) !== y) return;
-      var st = monthStats(m);
-      Object.keys(st.abs).forEach(function (c) { per[c] = (per[c] || 0) + st.abs[c]; });
+      monthStats(m).days.forEach(function (d) {
+        var tgt = d.iso > cut ? soon : per;
+        Object.keys(d.info.abs).forEach(function (c) { tgt[c] = (tgt[c] || 0) + d.info.abs[c]; });
+      });
     });
-    var days = {};
+    var days = {}, plannedDays = {};
     Object.keys(per).forEach(function (c) { days[c] = per[c] / dsec; });
-    return { seconds: per, days: days };
+    Object.keys(soon).forEach(function (c) { plannedDays[c] = soon[c] / dsec; });
+    return { seconds: per, days: days, plannedSeconds: soon, plannedDays: plannedDays };
   }
 
   // ---------------------------------------------------------------- render
@@ -891,15 +915,30 @@
     $("total-balance-days").textContent = Math.abs(bal) >= 60 ? "soit " + fmtDays(bal, dsec).replace("-", "−") : "";
     $("sample-badge").hidden = !state.isSample;
     $("asof-date").value = state.ui.asof;
+    // Dire quand le solde s'arrête avant la date demandée, faute de données.
+    var cut = dataCutoff(), note = $("asof-note");
+    var clipped = isStale() && state.ui.asof > cut;
+    note.hidden = !clipped;
+    note.textContent = clipped ? "arrêté au " + cut.split("-").reverse().join(".") + " — données non actualisées" : "";
 
-    var st = monthStats(state.ui.month);
+    var m0 = state.ui.month, st = monthStats(m0);
     var mb = $("month-balance");
-    var isCurrent = state.ui.month === monthOf(todayISO());
-    var shown = isCurrent ? st.balanceToDate : st.balance;
-    mb.textContent = fmtH(shown, { signed: true, zero: "0 h" });
-    mb.style.color = balanceColor(shown);
-    $("month-sub").textContent = monthLabel(state.ui.month) + " · saisi " + fmtH(isCurrent ? st.creditedToDate : st.credited) +
-      " / dû " + fmtH(isCurrent ? st.dueToDate : st.due) + (isCurrent ? " jusqu'à hier" : "");
+    var ahead = isFutureMonth(m0);
+    var uncovered = !ahead && (m0 + "-01") > st.cut;    // mois entier hors données
+    var shown = st.isPartial ? st.balanceToDate : st.balance;
+    if (ahead || uncovered) {
+      mb.textContent = "—";
+      mb.style.color = "var(--ink-3)";
+    } else {
+      mb.textContent = fmtH(shown, { signed: true, zero: "0 h" });
+      mb.style.color = balanceColor(shown);
+    }
+    $("month-sub").textContent = monthLabel(m0) + " · " + (
+      ahead ? fmtH(st.credited, { zero: "rien" }) + " déjà posé"
+      : uncovered ? "aucune donnée chargée"
+      : "saisi " + fmtH(st.isPartial ? st.creditedToDate : st.credited) +
+        " / dû " + fmtH(st.isPartial ? st.dueToDate : st.due) +
+        (st.isPartial ? " jusqu'au " + st.cut.slice(8) + "." + st.cut.slice(5, 7) : ""));
     var ref = Math.max(st.due, st.credited, 1);
     $("month-meter").innerHTML =
       '<i style="width:' + (100 * st.work / ref) + '%;background:var(--accent)"></i>' +
@@ -917,20 +956,30 @@
     $("tile-missing").classList.toggle("alert", missAll.length > 0);
 
     var abs = absenceDaysThisYear();
-    var vacDays = abs.days.vac || 0;
-    $("vac-days").textContent = (Math.round(vacDays * 10) / 10).toString().replace(".", ",");
-    $("vac-sub").textContent = "sur " + state.settings.vacationDays + " jours · reste " +
-      (Math.round((state.settings.vacationDays - vacDays) * 10) / 10).toString().replace(".", ",") + " j";
-    var pct = Math.max(0, Math.min(100, 100 * vacDays / (state.settings.vacationDays || 1)));
-    $("vac-meter").innerHTML = '<i style="width:' + pct + '%;background:var(--cat-vac)"></i>';
+    var one = function (n) { return (Math.round(n * 10) / 10).toString().replace(".", ","); };
+    var vacDays = abs.days.vac || 0, vacPlanned = abs.plannedDays.vac || 0;
+    var right = state.settings.vacationDays;
+    $("vac-days").textContent = one(vacDays);
+    var left = right - vacDays - vacPlanned;
+    $("vac-sub").innerHTML = (vacPlanned ? esc(one(vacPlanned)) + " j posés · " : "sur " + right + " jours · ") +
+      "reste " + (left < 0
+        ? '<b style="color:var(--warn);font-weight:600">−' + esc(one(-left)) + " j</b>"
+        : esc(one(left)) + " j");
+    var pctT = Math.max(0, Math.min(100, 100 * vacDays / (right || 1)));
+    var pctP = Math.max(0, Math.min(100 - pctT, 100 * vacPlanned / (right || 1)));
+    $("vac-meter").innerHTML = '<i style="width:' + pctT + '%;background:var(--cat-vac)"></i>' +
+      (pctP ? '<i title="posés, pas encore pris" style="width:' + pctP +
+        '%;background:color-mix(in srgb, var(--cat-vac) 38%, transparent)"></i>' : "");
 
     var other = ["rec", "mal", "oth"].map(function (c) {
       var d = abs.days[c] || 0;
       return d ? CATS[c].label.toLowerCase() + " " + (Math.round(d * 10) / 10).toString().replace(".", ",") + " j" : null;
     }).filter(Boolean);
     var totalAbs = Object.keys(abs.days).reduce(function (a, c) { return a + abs.days[c]; }, 0);
-    $("abs-days").textContent = (Math.round(totalAbs * 10) / 10).toString().replace(".", ",");
-    $("abs-sub").textContent = other.length ? other.join(" · ") : "vacances uniquement";
+    var totalPlanned = Object.keys(abs.plannedDays).reduce(function (a, c) { return a + abs.plannedDays[c]; }, 0);
+    $("abs-days").textContent = one(totalAbs);
+    $("abs-sub").textContent = (other.length ? other.join(" · ") : "vacances uniquement") +
+      (totalPlanned ? " · " + one(totalPlanned) + " j posés à venir" : "");
 
     var opening = state.settings.openingHours * 3600;
     var swiss = function (d) { return d ? d.split("-").reverse().join(".") : "—"; };
@@ -949,10 +998,13 @@
     if (months.length < 2) { host.innerHTML = ""; return; }
     var pts = [], run = state.settings.openingHours * 3600;
     months.forEach(function (m) {
+      if (isFutureMonth(m)) return;            // rien de réalisé : pas de point
       var st = monthStats(m);
-      run += (m === monthOf(todayISO()) ? st.balanceToDate : st.balance);
+      if ((m + "-01") > st.cut) return;        // au-delà des données chargées
+      run += (st.isPartial ? st.balanceToDate : st.balance);
       pts.push({ m: m, v: run });
     });
+    if (pts.length < 2) { host.innerHTML = ""; return; }
     var W = 560, H = 56, P = 6;
     var vals = pts.map(function (p) { return p.v; }).concat([0]);
     var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
@@ -984,15 +1036,23 @@
     // Cumul calculé dans l'ordre chronologique, affichage du plus récent au plus ancien.
     var run = state.settings.openingHours * 3600;
     var stats = months.map(function (m) {
-      var s = monthStats(m), isCur = m === monthOf(todayISO());
-      s.isCur = isCur;
-      s.shown = isCur ? s.balanceToDate : s.balance;
+      var s = monthStats(m);
+      s.isCur = s.isPartial;
+      s.isFuture = isFutureMonth(m);
+      // Un mois à venir n'affiche que ce qui y est déjà posé : aucun solde,
+      // donc aucun effet sur le cumul.
+      s.shown = s.isFuture ? 0 : (s.isPartial ? s.balanceToDate : s.balance);
       run += s.shown;
       s.run = run;
       return s;
     });
+    // Le filtre compte les mois écoulés : un mois à venir ne doit pas
+    // chasser un mois réel de la fenêtre affichée.
     var range = state.ui.range || "12";
-    if (range !== "all") stats = stats.slice(-(+range));
+    if (range !== "all") {
+      stats = stats.filter(function (s) { return !s.isFuture; }).slice(-(+range))
+        .concat(stats.filter(function (s) { return s.isFuture; }));
+    }
     stats.reverse();
     var maxAbs = Math.max.apply(null, stats.map(function (s) { return Math.abs(s.shown); }).concat([3600]));
     body.innerHTML = stats.map(function (s) {
@@ -1001,13 +1061,18 @@
       var bar = '<div class="div-bar"><span class="axis"></span>' +
         (Math.abs(bal) < 60 ? "" : '<i class="' + lvl + '" style="width:' + w.toFixed(1) + '%"></i>') +
         "</div>";
-      return '<tr class="row-click" data-month="' + s.month + '">' +
-        "<td>" + esc(monthLabel(s.month)) + (s.isCur ? ' <em style="font-style:normal;color:var(--ink-3);font-size:11.5px">(jusqu\'à hier)</em>' : "") + "</td>" +
+      var tag = s.isFuture ? "(à venir)"
+        : s.isPartial ? "(jusqu'au " + s.cut.slice(8) + "." + s.cut.slice(5, 7) + ")" : "";
+      return '<tr class="row-click' + (s.isFuture ? " row-future" : "") + '" data-month="' + s.month + '">' +
+        "<td>" + esc(monthLabel(s.month)) +
+        (tag ? ' <em style="font-style:normal;color:var(--ink-3);font-size:11.5px">' + tag + "</em>" : "") + "</td>" +
         '<td class="num">' + fmtH(s.isCur ? s.dueToDate : s.due) + "</td>" +
-        '<td class="num">' + fmtH(s.isCur ? s.creditedToDate : s.credited) + "</td>" +
-        '<td class="num cell-' + lvl + '">' + fmtH(bal, { signed: true }) + "</td>" +
-        '<td class="div-cell">' + bar + "</td>" +
-        '<td class="num ' + (s.run > 0 ? "cell-pos" : s.run < 0 ? "cell-neg" : "") + '">' + fmtH(s.run, { signed: true }) + "</td>" +
+        '<td class="num">' + fmtH(s.isCur ? s.creditedToDate : s.credited, { zero: "—" }) + "</td>" +
+        (s.isFuture
+          ? '<td class="num">—</td><td class="div-cell"></td><td class="num">—</td>'
+          : '<td class="num cell-' + lvl + '">' + fmtH(bal, { signed: true }) + "</td>" +
+            '<td class="div-cell">' + bar + "</td>" +
+            '<td class="num ' + (s.run > 0 ? "cell-pos" : s.run < 0 ? "cell-neg" : "") + '">' + fmtH(s.run, { signed: true }) + "</td>") +
         "</tr>";
     }).join("");
     Array.prototype.forEach.call(body.querySelectorAll("tr[data-month]"), function (tr) {
@@ -1027,8 +1092,9 @@
     set[state.ui.month] = true;
     var list = Object.keys(set).sort();
     sel.innerHTML = list.map(function (m) {
+      var note = isFutureMonth(m) ? " — à venir" : isLoaded(m) ? "" : " — non chargé";
       return '<option value="' + m + '"' + (m === state.ui.month ? " selected" : "") + ">" +
-        esc(monthLabel(m)) + (isLoaded(m) ? "" : " — non chargé") + "</option>";
+        esc(monthLabel(m)) + note + "</option>";
     }).join("");
   }
 
@@ -1102,22 +1168,25 @@
       });
     });
 
-    var isCur = m === monthOf(todayISO());
+    var isCur = st.isPartial, future = isFutureMonth(m);
     var bal = isCur ? st.balanceToDate : st.balance;
     var endOfMonth = m + "-" + pad(daysInMonth(m));
-    var cum = totalBalance(isCur ? today : endOfMonth);
-    var yest = iso(addDays(parseISO(today), -1));
+    var cum = totalBalance(future || isCur ? today : endOfMonth);
     // Barre du solde mensuel : pleine à ±20 h.
     var lvl = balanceLevel(bal), bw = Math.min(50, 50 * Math.abs(bal) / Math.max(20 * 3600, Math.abs(bal)));
     var monthBar = '<div class="div-bar" title="Solde du mois"><span class="axis"></span>' +
       (Math.abs(bal) < 60 ? "" : '<i class="' + lvl + '" style="width:' + bw.toFixed(1) + '%"></i>') + "</div>";
+    var cumLabel = (future || isCur) ? "Solde cumulé à ce jour : " : "Solde cumulé à cette date : ";
     $("days-foot").innerHTML =
-      "<tr><td>Total " + esc(monthLabel(m)) + (isCur ? " (au " + yest.slice(8) + "." + yest.slice(5, 7) + ")" : "") + "</td>" +
+      "<tr><td>Total " + esc(monthLabel(m)) +
+      (future ? " (posé)" : isCur ? " (au " + st.cut.slice(8) + "." + st.cut.slice(5, 7) + ")" : "") + "</td>" +
       '<td class="num">' + fmtH(isCur ? st.dueToDate : st.due) + "</td>" +
-      '<td class="num">' + fmtH(isCur ? st.creditedToDate : st.credited) + "</td>" +
-      '<td class="num cell-' + lvl + '">' + fmtH(bal, { signed: true }) + "</td>" +
-      '<td style="min-width:140px">' + monthBar + "</td>" +
-      '<td style="text-align:left;font-weight:500;color:var(--ink-2)">Solde cumulé à cette date : ' +
+      '<td class="num">' + fmtH(isCur ? st.creditedToDate : st.credited, { zero: "—" }) + "</td>" +
+      (future
+        ? '<td class="num">—</td><td style="min-width:140px"></td>'
+        : '<td class="num cell-' + lvl + '">' + fmtH(bal, { signed: true }) + "</td>" +
+          '<td style="min-width:140px">' + monthBar + "</td>") +
+      '<td style="text-align:left;font-weight:500;color:var(--ink-2)">' + cumLabel +
       '<span class="num" style="color:' + (cum >= 0 ? "var(--pos)" : "var(--neg)") + '">' + fmtH(cum, { signed: true }) + "</span></td></tr>";
   }
 
@@ -1181,16 +1250,24 @@
   function coverageText() {
     var loaded = (state.settings.loadedMonths || []).slice().sort();
     if (!loaded.length) return "aucune";
+    loaded = loaded.filter(function (m) { return !isFutureMonth(m); });
+    if (!loaded.length) return "aucune";
     var to = state.settings.coverageTo || (loaded[loaded.length - 1] + "-01");
     return (loaded[0] + "-01").split("-").reverse().join(".") + " → " + to.split("-").reverse().join(".");
   }
 
   function renderFoot() {
     var s = state.settings;
-    var loaded = (s.loadedMonths || []).length;
-    var expected = monthsBetween(monthOf(s.openingDate), monthOf(todayISO())).length;
+    // Un mois à venir ne compte pas dans la couverture : il n'y a rien à y
+    // couvrir. Sans ça le pied affichait « 28 mois chargés sur 27 ».
+    var span = monthsBetween(monthOf(s.openingDate), monthOf(todayISO()));
+    var all = s.loadedMonths || [];
+    var loaded = all.filter(function (m) { return span.indexOf(m) >= 0; }).length;
+    var ahead = all.filter(isFutureMonth).length;
+    var expected = span.length;
     $("coverage").textContent = loaded
-      ? loaded + " mois chargés sur " + expected + " · " + coverageText()
+      ? loaded + " mois chargés sur " + expected + " · " + coverageText() +
+        (ahead ? " · " + ahead + " mois à venir" : "")
       : "Aucune donnée chargée";
     $("freshness").textContent = s.fetchedAt
       ? "Actualisé le " + new Date(s.fetchedAt).toLocaleString("fr-CH", { dateStyle: "short", timeStyle: "short" })
@@ -1290,7 +1367,7 @@
         }
       }
       await Promise.all([worker(), worker(), worker()]);
-      if (got) { state.isSample = false; reconcileLoaded(); }
+      if (got) { state.isSample = false; reconcileLoaded(); focusCoveredMonth(); }
       setNotice("db", failed.length
         ? "<div><strong>" + failed.length + " mois n'ont pas pu être lus</strong> (" +
           esc(failed.sort().map(monthLabel).join(", ")) + "). Leurs chiffres peuvent être anciens — rechargez la page.</div>"
@@ -1717,9 +1794,19 @@
   }
 
   // ---------------------------------------------------------------- boot
+  /** Land on a month that has something to show: the current month is empty
+   *  when the data has not been refreshed for a while. */
+  function focusCoveredMonth() {
+    var m = state.ui.month;
+    if (state.months[m] || !isStale()) return;
+    var fallback = monthOf(dataCutoff());
+    if (state.months[fallback]) state.ui.month = fallback;
+  }
+
   function boot() {
     var hadLocal = loadLocal();
     if (!hadLocal) buildSample();
+    focusCoveredMonth();
     wire();
     render();
 
